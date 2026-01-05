@@ -216,6 +216,15 @@ class MusicPlayer:
             if prev_idx is not None:
                 self.play_file(prev_idx)
 
+    def _preexec_fn(self):
+        # Ensure the child process receives SIGTERM if the parent dies
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6")
+        PR_SET_PDEATHSIG = 1
+        libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+        # Still create a new session
+        os.setsid()
+
     def play_file(self, index):
         self.cleanup() # Stop current
         
@@ -241,7 +250,7 @@ class MusicPlayer:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    preexec_fn=os.setsid
+                    preexec_fn=self._preexec_fn
                 )
                 self.paused = False
                 self.view_mode = 'player' # Switch to player view
