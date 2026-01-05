@@ -63,6 +63,9 @@ class MusicPlayer:
         atexit.register(self.cleanup)
         signal.signal(signal.SIGINT, self.handle_signal)
         signal.signal(signal.SIGTERM, self.handle_signal)
+        # Catch Ctrl+Z (Suspend) and Ctrl+\ (Quit) to kill mpv before exiting
+        signal.signal(signal.SIGTSTP, self.handle_signal)
+        signal.signal(signal.SIGQUIT, self.handle_signal)
 
         self.scan_directory()
         
