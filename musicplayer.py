@@ -11,6 +11,7 @@ import json
 import shutil
 import atexit
 import tempfile
+import random
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
@@ -29,6 +30,9 @@ class MusicPlayer:
         self.volume = 100
         self.running = True
         self.view_mode = 'browser' # 'browser' or 'player'
+        self.shuffle = False
+        self.library_mode = False # False = Standard Browser, True = Recursive Library
+        self.playback_history = [] # Stack for "Previous" functionality
         
         # MPV State
         self.mpv_process = None
@@ -91,24 +95,59 @@ class MusicPlayer:
                 pass
 
     def scan_directory(self):
+        """Standard Browser Mode: List current dir"""
+        self.library_mode = False
         self.files = []
         try:
             items = sorted(os.listdir(self.current_dir))
-            self.files.append({'name': '..', 'type': 'dir'})
+            self.files.append({'name': '..', 'type': 'dir', 'path': '..'})
             for item in items:
                 full_path = os.path.join(self.current_dir, item)
                 if os.path.isdir(full_path) and not item.startswith('.'):
-                    self.files.append({'name': item, 'type': 'dir'})
+                    self.files.append({'name': item, 'type': 'dir', 'path': item})
                 elif os.path.isfile(full_path):
                     ext = os.path.splitext(item)[1].lower()
                     if ext in AUDIO_EXTENSIONS:
-                        self.files.append({'name': item, 'type': 'file'})
+                        self.files.append({'name': item, 'type': 'file', 'path': item})
             
-            if self.selected_index >= len(self.files):
-                self.selected_index = 0
-                self.scroll_offset = 0
+            self._reset_selection()
         except PermissionError:
             pass
+
+    def scan_recursive(self):
+        """Library Mode: Flatten all subdirectories"""
+        self.library_mode = True
+        self.files = []
+        # Option to go back to browser
+        self.files.append({'name': '.. (Return to Browser Mode)', 'type': 'dir', 'path': '..'})
+        
+        try:
+            # Show loading message (simple blocking since we are single threaded UI mostly)
+            self.stdscr.addstr(0, 0, " Scanning Library... please wait ")
+            self.stdscr.refresh()
+            
+            for root, dirs, files in os.walk(self.current_dir):
+                # Sort to ensure consistent order
+                dirs.sort()
+                files.sort()
+                
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in AUDIO_EXTENSIONS:
+                        # Store relative path for display and access
+                        full_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(full_path, self.current_dir)
+                        self.files.append({'name': rel_path, 'type': 'file', 'path': rel_path})
+            
+            self._reset_selection()
+        except Exception:
+            self.library_mode = False
+            self.scan_directory()
+
+    def _reset_selection(self):
+        if self.selected_index >= len(self.files):
+            self.selected_index = 0
+            self.scroll_offset = 0
 
     def send_ipc_command(self, command):
         """Send raw JSON command to MPV socket"""
@@ -181,14 +220,28 @@ class MusicPlayer:
             time.sleep(0.5)
 
     def get_next_index(self, current_idx):
-        idx = current_idx + 1
-        while idx < len(self.files):
-            if self.files[idx]['type'] == 'file':
-                return idx
-            idx += 1
-        return None
+        if self.shuffle:
+            # Get all audio file indices
+            candidates = [i for i, f in enumerate(self.files) if f['type'] == 'file' and i != current_idx]
+            if candidates:
+                return random.choice(candidates)
+            return None
+        else:
+            idx = current_idx + 1
+            while idx < len(self.files):
+                if self.files[idx]['type'] == 'file':
+                    return idx
+                idx += 1
+            return None
 
     def get_prev_index(self, current_idx):
+        # If we have history, pop from it (Shuffle or Normal)
+        if self.playback_history:
+            # The last item is current song, so we need the one before
+            # But we only push to history when changing.
+            # Let's peek.
+            return self.playback_history[-1]
+            
         idx = current_idx - 1
         while idx >= 0:
             if self.files[idx]['type'] == 'file':
@@ -211,10 +264,18 @@ class MusicPlayer:
                 self.play_file(next_idx)
 
     def play_prev(self):
-        if self.playing_index != -1:
-            prev_idx = self.get_prev_index(self.playing_index)
-            if prev_idx is not None:
-                self.play_file(prev_idx)
+        if self.playback_history:
+            prev_idx = self.playback_history.pop()
+            self.play_file(prev_idx, push_history=False)
+        else:
+            # Fallback to linear prev if no history
+            if self.playing_index != -1:
+                idx = self.playing_index - 1
+                while idx >= 0:
+                    if self.files[idx]['type'] == 'file':
+                        self.play_file(idx, push_history=False)
+                        return
+                    idx -= 1
 
     def _preexec_fn(self):
         # Ensure the child process receives SIGTERM if the parent dies
@@ -225,12 +286,20 @@ class MusicPlayer:
         # Still create a new session
         os.setsid()
 
-    def play_file(self, index):
+    def play_file(self, index, push_history=True):
         self.cleanup() # Stop current
         
         if 0 <= index < len(self.files) and self.files[index]['type'] == 'file':
+            # Add current song to history before switching
+            if push_history and self.playing_index != -1:
+                self.playback_history.append(self.playing_index)
+                # Keep history manageable
+                if len(self.playback_history) > 50:
+                    self.playback_history.pop(0)
+
             self.playing_index = index
-            file_path = os.path.join(self.current_dir, self.files[index]['name'])
+            # Path handling: join current_dir with the relative path stored in item
+            file_path = os.path.join(self.current_dir, self.files[index]['path'])
             self.metadata = {} # Reset metadata
             
             try:
@@ -319,15 +388,23 @@ class MusicPlayer:
             if 'title' in self.metadata: title = self.metadata['title']
             if 'artist' in self.metadata: artist = self.metadata['artist']
             
-            # Prev
-            p_idx = self.get_prev_index(self.playing_index)
-            if p_idx is not None:
-                prev_name = f"Prev: {self.files[p_idx]['name']}"
+            # Prev info (Logical or History)
+            if self.playback_history:
+                 p_idx = self.playback_history[-1]
+                 if 0 <= p_idx < len(self.files):
+                    prev_name = f"Prev: {self.files[p_idx]['name']}"
+            else:
+                p_idx = self.playing_index - 1 # Simple lookback
+                if 0 <= p_idx < len(self.files) and self.files[p_idx]['type'] == 'file':
+                     prev_name = f"Prev: {self.files[p_idx]['name']}"
                 
-            # Next
-            n_idx = self.get_next_index(self.playing_index)
-            if n_idx is not None:
-                next_name = f"Next: {self.files[n_idx]['name']}"
+            # Next (Shuffle or Linear)
+            if self.shuffle:
+                next_name = "Next: Random"
+            else:
+                n_idx = self.get_next_index(self.playing_index)
+                if n_idx is not None:
+                    next_name = f"Next: {self.files[n_idx]['name']}"
             
         # Layout
         center_y = height // 2
@@ -348,7 +425,10 @@ class MusicPlayer:
         except: pass
         
         # Status
-        status = "PAUSED" if self.paused else "PLAYING"
+        mode_str = " [Shuffle]" if self.shuffle else ""
+        if self.library_mode: mode_str += " [Lib]"
+        
+        status = ("PAUSED" if self.paused else "PLAYING") + mode_str
         try:
             self.stdscr.addstr(center_y + 1, (width - len(status)) // 2, status, 
                            curses.color_pair(3) if self.paused else curses.color_pair(2))
@@ -371,7 +451,7 @@ class MusicPlayer:
              except: pass
 
         # Controls Hint
-        hint = "[n] Next  [p] Prev  [Space] Pause  [q] Browser  [+/-] Vol"
+        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [q] Browser"
         try:
             self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
@@ -380,10 +460,12 @@ class MusicPlayer:
         height, width = self.stdscr.getmaxyx()
         
         # Header
-        header = f" Browser: {self.current_dir} "
+        mode_title = "LIBRARY (Recursive)" if self.library_mode else f"Browser: {self.current_dir}"
+        if self.shuffle: mode_title += " [SHUFFLE]"
+        
         try:
             self.stdscr.attron(curses.color_pair(1))
-            self.stdscr.addstr(0, 0, header + " " * (width - len(header) - 1))
+            self.stdscr.addstr(0, 0, f" {mode_title} " + " " * (width - len(mode_title) - 3))
             self.stdscr.attroff(curses.color_pair(1))
         except: pass
         
@@ -419,6 +501,12 @@ class MusicPlayer:
                 self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
             except:
                 pass
+        else:
+            # Help footer
+            help_txt = "[R]ecursive Lib | [B]rowser | [z]Shuffle"
+            try:
+                self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
+            except: pass
 
     def run(self):
         while self.running:
@@ -446,7 +534,7 @@ class MusicPlayer:
                         self.view_mode = 'browser'
                     else:
                         self.running = False
-                elif key == 9: #TAB
+                elif key == 9: # TAB
                     self.view_mode = 'player' if self.view_mode == 'browser' and self.playing_index != -1 else 'browser'
                 elif key == ord(' '):
                     self.toggle_pause()
@@ -460,6 +548,12 @@ class MusicPlayer:
                     self.play_next()
                 elif key == ord('p'):
                     self.play_prev()
+                elif key == ord('z'):
+                    self.shuffle = not self.shuffle
+                elif key == ord('R'):
+                    self.scan_recursive()
+                elif key == ord('B'):
+                    self.scan_directory()
                 
                 # Browser navigation
                 if self.view_mode == 'browser':
@@ -474,13 +568,28 @@ class MusicPlayer:
                             self.scroll_offset = self.selected_index - (height - 2) + 1
                     elif key == curses.KEY_ENTER or key == 10 or key == 13:
                         if self.files:
-                            if self.files[self.selected_index]['type'] == 'dir':
-                                new_path = os.path.abspath(os.path.join(self.current_dir, self.files[self.selected_index]['name']))
-                                if os.path.isdir(new_path):
-                                    self.current_dir = new_path
-                                    self.selected_index = 0
-                                    self.scroll_offset = 0
-                                    self.scan_directory()
+                            selected = self.files[self.selected_index]
+                            if selected['type'] == 'dir':
+                                if selected['path'] == '..':
+                                    # If in Library mode, .. goes back to standard browser mode
+                                    if self.library_mode:
+                                        self.scan_directory()
+                                    else:
+                                        # Normal directory up
+                                        new_path = os.path.abspath(os.path.join(self.current_dir, '..'))
+                                        if os.path.isdir(new_path):
+                                            self.current_dir = new_path
+                                            self.selected_index = 0
+                                            self.scroll_offset = 0
+                                            self.scan_directory()
+                                else:
+                                    # Enter directory (only possible in Browser mode)
+                                    new_path = os.path.abspath(os.path.join(self.current_dir, selected['path']))
+                                    if os.path.isdir(new_path):
+                                        self.current_dir = new_path
+                                        self.selected_index = 0
+                                        self.scroll_offset = 0
+                                        self.scan_directory()
                             else:
                                 self.play_file(self.selected_index)
 
