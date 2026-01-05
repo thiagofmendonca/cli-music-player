@@ -2,6 +2,8 @@
 
 A lightweight, terminal-based music player written in Python, using `mpv` as the playback engine.
 
+![Demo](demo.gif)
+
 ## Features
 
 - **Terminal User Interface (TUI):** Clean interface built with `curses`.
