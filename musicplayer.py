@@ -34,6 +34,10 @@ class MusicPlayer:
         self.library_mode = False # False = Standard Browser, True = Recursive Library
         self.playback_history = [] # Stack for "Previous" functionality
         
+        # Animation State
+        self.anim_frame = 0
+        self.last_anim_time = time.time()
+        
         # MPV State
         self.mpv_process = None
         self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
@@ -50,6 +54,7 @@ class MusicPlayer:
         curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_RED)   # Error
         curses.init_pair(5, curses.COLOR_CYAN, -1)      # Progress Bar
         curses.init_pair(6, curses.COLOR_WHITE, -1)     # Dimmed/Normal text
+        curses.init_pair(7, curses.COLOR_GREEN, -1)     # Cthulhu (Light Green with Bold)
         curses.curs_set(0)
         self.stdscr.nodelay(1)
         self.stdscr.timeout(100)
@@ -370,7 +375,7 @@ class MusicPlayer:
         height, width = self.stdscr.getmaxyx()
         
         # Check if terminal is too small
-        if height < 10 or width < 40:
+        if height < 15 or width < 40:
             try:
                 self.stdscr.addstr(0, 0, "Terminal too small")
             except: pass
@@ -406,48 +411,88 @@ class MusicPlayer:
                 if n_idx is not None:
                     next_name = f"Next: {self.files[n_idx]['name']}"
             
-        # Layout
+        # Layout Calculations
         center_y = height // 2
         
-        # Previous Track (Dimmed)
-        if prev_name and center_y - 5 > 0:
+        # 1. Previous Track (Dimmed) - Higher up
+        if prev_name and center_y - 8 > 0:
             try:
-                self.stdscr.addstr(center_y - 5, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
-                self.stdscr.addstr(center_y - 4, (width - 1) // 2, "^", curses.A_DIM)
+                self.stdscr.addstr(center_y - 8, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
+                self.stdscr.addstr(center_y - 7, (width - 1) // 2, "^", curses.A_DIM)
             except: pass
 
-        # Current Track (Bold/Color)
+        # 2. Current Track (Bold/Color)
         try:
             self.stdscr.attron(curses.A_BOLD)
-            self.stdscr.addstr(center_y - 2, max(0, (width - len(title)) // 2), title[:width])
+            self.stdscr.addstr(center_y - 5, max(0, (width - len(title)) // 2), title[:width])
             self.stdscr.attroff(curses.A_BOLD)
-            self.stdscr.addstr(center_y - 1, max(0, (width - len(artist)) // 2), artist[:width])
+            self.stdscr.addstr(center_y - 4, max(0, (width - len(artist)) // 2), artist[:width])
         except: pass
         
-        # Status
+        # 3. Status
         mode_str = " [Shuffle]" if self.shuffle else ""
         if self.library_mode: mode_str += " [Lib]"
-        
         status = ("PAUSED" if self.paused else "PLAYING") + mode_str
         try:
-            self.stdscr.addstr(center_y + 1, (width - len(status)) // 2, status, 
+            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status, 
                            curses.color_pair(3) if self.paused else curses.color_pair(2))
         except: pass
 
-        # Progress
-        self.draw_progress_bar(center_y + 3, width - 4)
+        # 4. PULSING CTHULHU (ASCII ART)
+        # Update animation frame
+        if time.time() - self.last_anim_time > 0.4: # 400ms pulse
+            self.anim_frame = (self.anim_frame + 1) % 2
+            self.last_anim_time = time.time()
         
-        # Volume
+        cthulhu_frames = [
+            [
+                " ( o . o ) ",
+                " (  |||  ) ",
+                "/||\/||\/|\\"
+            ],
+            [
+                " ( O . O ) ",
+                " ( /|||\ ) ",
+                "//||\/||\/\\\\"
+            ]
+        ]
+        
+        if not self.paused and self.playing_index != -1:
+            art = cthulhu_frames[self.anim_frame]
+            # Draw Art (3 lines) starting at center_y
+            for i, line in enumerate(art):
+                try:
+                    self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
+                                       curses.color_pair(7) | curses.A_BOLD)
+                except: pass
+        elif self.paused:
+             # Sleeping Cthulhu
+             art = [
+                " ( - . - ) ",
+                " (  zzz  ) ",
+                "  |||||||  "
+             ]
+             for i, line in enumerate(art):
+                try:
+                    self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
+                                       curses.color_pair(7) | curses.A_DIM)
+                except: pass
+
+
+        # 5. Progress Bar
+        self.draw_progress_bar(center_y + 4, width - 4)
+        
+        # 6. Volume
         vol_str = f"Volume: {self.volume}%"
         try:
-            self.stdscr.addstr(center_y + 5, (width - len(vol_str)) // 2, vol_str)
+            self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
         except: pass
 
-        # Next Track (Dimmed)
-        if next_name and center_y + 8 < height - 1:
+        # 7. Next Track (Dimmed)
+        if next_name and center_y + 9 < height - 1:
              try:
-                 self.stdscr.addstr(center_y + 7, (width - 1) // 2, "v", curses.A_DIM)
-                 self.stdscr.addstr(center_y + 8, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
+                 self.stdscr.addstr(center_y + 8, (width - 1) // 2, "v", curses.A_DIM)
+                 self.stdscr.addstr(center_y + 9, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
              except: pass
 
         # Controls Hint
