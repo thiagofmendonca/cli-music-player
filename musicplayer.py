@@ -288,144 +288,335 @@ class MusicPlayer:
         except:
             pass
 
-    def draw_player_view(self):
-        height, width = self.stdscr.getmaxyx()
-        
-        # Determine current, prev, next
-        title = "No Media"
-        artist = "Unknown Artist"
-        prev_name = ""
-        next_name = ""
-        
-        if self.playing_index != -1:
-            # Current
-            title = self.files[self.playing_index]['name']
-            if 'title' in self.metadata: title = self.metadata['title']
-            if 'artist' in self.metadata: artist = self.metadata['artist']
+        def draw_player_view(self):
+
+            height, width = self.stdscr.getmaxyx()
+
             
-            # Prev
-            p_idx = self.get_prev_index(self.playing_index)
-            if p_idx is not None:
-                prev_name = f"Prev: {self.files[p_idx]['name']}"
+
+            # Check if terminal is too small
+
+            if height < 10 or width < 40:
+
+                try:
+
+                    self.stdscr.addstr(0, 0, "Terminal too small")
+
+                except: pass
+
+                return
+
+    
+
+            # Determine current, prev, next
+
+            title = "No Media"
+
+            artist = "Unknown Artist"
+
+            prev_name = ""
+
+            next_name = ""
+
+            
+
+            if self.playing_index != -1:
+
+                # Current
+
+                title = self.files[self.playing_index]['name']
+
+                if 'title' in self.metadata: title = self.metadata['title']
+
+                if 'artist' in self.metadata: artist = self.metadata['artist']
+
                 
-            # Next
-            n_idx = self.get_next_index(self.playing_index)
-            if n_idx is not None:
-                next_name = f"Next: {self.files[n_idx]['name']}"
-            
-        # Layout
-        center_y = height // 2
-        
-        # Previous Track (Dimmed)
-        if prev_name:
-            self.stdscr.addstr(center_y - 5, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
-            self.stdscr.addstr(center_y - 4, (width - 1) // 2, "^", curses.A_DIM)
 
-        # Current Track (Bold/Color)
-        self.stdscr.attron(curses.A_BOLD)
-        self.stdscr.addstr(center_y - 2, (width - len(title)) // 2, title[:width])
-        self.stdscr.attroff(curses.A_BOLD)
-        self.stdscr.addstr(center_y - 1, (width - len(artist)) // 2, artist[:width])
-        
-        # Status
-        status = "PAUSED" if self.paused else "PLAYING"
-        self.stdscr.addstr(center_y + 1, (width - len(status)) // 2, status, 
-                           curses.color_pair(3) if self.paused else curses.color_pair(2))
+                # Prev
 
-        # Progress
-        self.draw_progress_bar(center_y + 3, width - 4)
-        
-        # Volume
-        vol_str = f"Volume: {self.volume}%"
-        self.stdscr.addstr(center_y + 5, (width - len(vol_str)) // 2, vol_str)
+                p_idx = self.get_prev_index(self.playing_index)
 
-        # Next Track (Dimmed)
-        if next_name:
-             self.stdscr.addstr(center_y + 7, (width - 1) // 2, "v", curses.A_DIM)
-             self.stdscr.addstr(center_y + 8, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
+                if p_idx is not None:
 
-        # Controls Hint
-        hint = "[n] Next  [p] Prev  [Space] Pause  [q] Browser  [+/-] Vol"
-        self.stdscr.addstr(height - 2, (width - len(hint)) // 2, hint, curses.color_pair(1))
+                    prev_name = f"Prev: {self.files[p_idx]['name']}"
 
-    def draw_browser(self):
-        height, width = self.stdscr.getmaxyx()
-        
-        # Header
-        header = f" Browser: {self.current_dir} "
-        self.stdscr.attron(curses.color_pair(1))
-        self.stdscr.addstr(0, 0, header + " " * (width - len(header) - 1))
-        self.stdscr.attroff(curses.color_pair(1))
-        
-        list_height = height - 2
-        for i in range(list_height):
-            file_idx = i + self.scroll_offset
-            if file_idx >= len(self.files): break
-            
-            item = self.files[file_idx]
-            name = item['name']
-            if item['type'] == 'dir': name += "/"
-            
-            style = curses.A_NORMAL
-            prefix = "  "
-            
-            if item['type'] == 'dir': style = curses.color_pair(3)
-            if self.playing_index != -1 and self.files[self.playing_index] == item:
-                style = curses.color_pair(2) | curses.A_BOLD
-                prefix = ">>"
-            if file_idx == self.selected_index:
-                style = curses.color_pair(1)
+                    
+
+                # Next
+
+                n_idx = self.get_next_index(self.playing_index)
+
+                if n_idx is not None:
+
+                    next_name = f"Next: {self.files[n_idx]['name']}"
+
                 
+
+            # Layout
+
+            center_y = height // 2
+
+            
+
+            # Previous Track (Dimmed)
+
+            if prev_name and center_y - 5 > 0:
+
+                try:
+
+                    self.stdscr.addstr(center_y - 5, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
+
+                    self.stdscr.addstr(center_y - 4, (width - 1) // 2, "^", curses.A_DIM)
+
+                except: pass
+
+    
+
+            # Current Track (Bold/Color)
+
             try:
-                line = f"{prefix} {name}"
-                self.stdscr.addstr(i + 1, 0, line[:width], style)
-            except:
-                pass
-                
-        # Mini Player Status at bottom if playing
-        if self.playing_index != -1:
-            status = f" Playing: {self.files[self.playing_index]['name']} ({self.volume}%) [TAB to View]"
-            try:
-                self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
-            except:
-                pass
 
-    def run(self):
-        while self.running:
-            self.stdscr.erase()
+                self.stdscr.attron(curses.A_BOLD)
+
+                self.stdscr.addstr(center_y - 2, max(0, (width - len(title)) // 2), title[:width])
+
+                self.stdscr.attroff(curses.A_BOLD)
+
+                self.stdscr.addstr(center_y - 1, max(0, (width - len(artist)) // 2), artist[:width])
+
+            except: pass
+
             
-            if self.view_mode == 'player':
-                self.draw_player_view()
-            else:
-                self.draw_browser()
-                
+
+            # Status
+
+            status = "PAUSED" if self.paused else "PLAYING"
+
             try:
-                key = self.stdscr.getch()
-            except:
-                continue
+
+                self.stdscr.addstr(center_y + 1, (width - len(status)) // 2, status, 
+
+                               curses.color_pair(3) if self.paused else curses.color_pair(2))
+
+            except: pass
+
+    
+
+            # Progress
+
+            self.draw_progress_bar(center_y + 3, width - 4)
+
+            
+
+            # Volume
+
+            vol_str = f"Volume: {self.volume}%"
+
+            try:
+
+                self.stdscr.addstr(center_y + 5, (width - len(vol_str)) // 2, vol_str)
+
+            except: pass
+
+    
+
+            # Next Track (Dimmed)
+
+            if next_name and center_y + 8 < height - 1:
+
+                 try:
+
+                     self.stdscr.addstr(center_y + 7, (width - 1) // 2, "v", curses.A_DIM)
+
+                     self.stdscr.addstr(center_y + 8, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
+
+                 except: pass
+
+    
+
+            # Controls Hint
+
+            hint = "[n] Next  [p] Prev  [Space] Pause  [q] Browser  [+/-] Vol"
+
+            try:
+
+                self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
+
+            except: pass
+
+    
+
+        def draw_browser(self):
+
+            height, width = self.stdscr.getmaxyx()
+
+            
+
+            # Header
+
+            header = f" Browser: {self.current_dir} "
+
+            try:
+
+                self.stdscr.attron(curses.color_pair(1))
+
+                self.stdscr.addstr(0, 0, header + " " * (width - len(header) - 1))
+
+                self.stdscr.attroff(curses.color_pair(1))
+
+            except: pass
+
+            
+
+            list_height = height - 2
+
+            for i in range(list_height):
+
+                file_idx = i + self.scroll_offset
+
+                if file_idx >= len(self.files): break
+
                 
-            if key != -1:
-                if key == ord('q'):
-                    if self.view_mode == 'player':
-                        self.view_mode = 'browser'
-                    else:
-                        self.running = False
-                elif key == 9: #TAB
-                    self.view_mode = 'player' if self.view_mode == 'browser' and self.playing_index != -1 else 'browser'
-                elif key == ord(' '):
-                    self.toggle_pause()
-                elif key == ord('s'):
-                    self.stop_music()
-                elif key == ord('+') or key == ord('='):
-                    self.change_volume(5)
-                elif key == ord('-') or key == ord('_'):
-                    self.change_volume(-5)
-                elif key == ord('n'):
-                    self.play_next()
-                elif key == ord('p'):
-                    self.play_prev()
+
+                item = self.files[file_idx]
+
+                name = item['name']
+
+                if item['type'] == 'dir': name += "/"
+
                 
-                # Browser navigation
+
+                style = curses.A_NORMAL
+
+                prefix = "  "
+
+                
+
+                if item['type'] == 'dir': style = curses.color_pair(3)
+
+                if self.playing_index != -1 and self.files[self.playing_index] == item:
+
+                    style = curses.color_pair(2) | curses.A_BOLD
+
+                    prefix = ">>"
+
+                if file_idx == self.selected_index:
+
+                    style = curses.color_pair(1)
+
+                    
+
+                try:
+
+                    line = f"{prefix} {name}"
+
+                    self.stdscr.addstr(i + 1, 0, line[:width], style)
+
+                except:
+
+                    pass
+
+                    
+
+            # Mini Player Status at bottom if playing
+
+            if self.playing_index != -1:
+
+                status = f" Playing: {self.files[self.playing_index]['name']} ({self.volume}%) [TAB to View]"
+
+                try:
+
+                    self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
+
+                except:
+
+                    pass
+
+    
+
+        def run(self):
+
+            while self.running:
+
+                self.stdscr.erase()
+
+                
+
+                if self.view_mode == 'player':
+
+                    self.draw_player_view()
+
+                else:
+
+                    self.draw_browser()
+
+                    
+
+                try:
+
+                    key = self.stdscr.getch()
+
+                except:
+
+                    continue
+
+                    
+
+                if key != -1:
+
+                    if key == curses.KEY_RESIZE:
+
+                        curses.update_lines_cols()
+
+                        self.stdscr.clear()
+
+                        self.stdscr.refresh()
+
+                        continue
+
+                    
+
+                    if key == ord('q'):
+
+                        if self.view_mode == 'player':
+
+                            self.view_mode = 'browser'
+
+                        else:
+
+                            self.running = False
+
+                    elif key == 9: # TAB
+
+                        self.view_mode = 'player' if self.view_mode == 'browser' and self.playing_index != -1 else 'browser'
+
+                    elif key == ord(' '):
+
+                        self.toggle_pause()
+
+                    elif key == ord('s'):
+
+                        self.stop_music()
+
+                    elif key == ord('+') or key == ord('='):
+
+                        self.change_volume(5)
+
+                    elif key == ord('-') or key == ord('_'):
+
+                        self.change_volume(-5)
+
+                    elif key == ord('n'):
+
+                        self.play_next()
+
+                    elif key == ord('p'):
+
+                        self.play_prev()
+
+                    
+
+                    # Browser navigation
                 if self.view_mode == 'browser':
                     if key == curses.KEY_UP:
                         self.selected_index = max(0, self.selected_index - 1)
