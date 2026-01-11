@@ -335,6 +335,36 @@ class MusicPlayer:
 
             time.sleep(0.5)
 
+    def get_next_index(self, current_idx):
+        if self.shuffle:
+            # Get all audio file indices
+            candidates = [i for i, f in enumerate(self.files) if f['type'] == 'file' and i != current_idx]
+            if candidates:
+                return random.choice(candidates)
+            return None
+        else:
+            idx = current_idx + 1
+            while idx < len(self.files):
+                if self.files[idx]['type'] == 'file':
+                    return idx
+                idx += 1
+            return None
+
+    def get_prev_index(self, current_idx):
+        # If we have history, pop from it (Shuffle or Normal)
+        if self.playback_history:
+            # The last item is current song, so we need the one before
+            # But we only push to history when changing.
+            # Let's peek.
+            return self.playback_history[-1]
+            
+        idx = current_idx - 1
+        while idx >= 0:
+            if self.files[idx]['type'] == 'file':
+                return idx
+            idx -= 1
+        return None
+
     def get_position(self):
         if self.playing_index == -1: return 0
         if self.paused:
