@@ -1,12 +1,13 @@
 # CLI Music Player
 
-A lightweight, terminal-based music player written in Python, using `mpv` as the playback engine.
+A lightweight, terminal-based music player written in Python, featuring a pulsing Cthulhu and online lyrics support.
 
 ![Demo](demo.gif)
 
 ## Features
 
 - **Terminal User Interface (TUI):** Clean interface built with `curses`.
+- **Online & Synced Lyrics:** Automatic lyrics fetching from `LRCLIB`, `Letras.mus.br`, and `Lyrics.ovh`.
 - **File Browser:** Navigate directories to find your music.
 - **Recursive Library Mode:** Scan all subdirectories and play your entire collection at once.
 - **Shuffle Mode:** Randomized playback with a history-aware "Previous" function.
@@ -14,17 +15,26 @@ A lightweight, terminal-based music player written in Python, using `mpv` as the
 - **Playback Controls:**
   - Play / Pause / Stop
   - Next / Previous Track
-  - Volume Control (up to 200%)
-  - Seek / Progress Bar
-- **Now Playing View:** Dedicated screen showing track info and progress.
-- **Dependency Check:** Automatically detects and attempts to install `mpv` if missing (Linux).
+  - Volume Control
+  - Progress Bar with Synced Lyrics highlighting.
+- **Now Playing View:** Dedicated screen showing track info, progress, and Cthulhu/Lyrics.
 
 ## Requirements
 
-- Python 3
-- `mpv` (The script attempts to install it automatically on Linux, but you can install it manually via your package manager).
+- Python 3.8+
+- Audio output device.
 
 ## Installation
+
+### Via PIP (Recommended)
+
+Install directly from PyPI:
+
+```bash
+pip install cli-music-player-cthulhu
+```
+
+### From Source
 
 1. Clone the repository:
    ```bash
@@ -32,23 +42,21 @@ A lightweight, terminal-based music player written in Python, using `mpv` as the
    cd cli-music-player
    ```
 
-2. Make the script executable:
+2. Install dependencies:
    ```bash
-   chmod +x musicplayer.py
+   pip install pygame mutagen
    ```
 
-3. (Optional) Install globally:
+3. Run the script:
    ```bash
-   sudo cp musicplayer.py /usr/local/bin/musicplayer
+   python musicplayer.py
    ```
 
 ## Usage
 
-Run the script from your terminal:
+Run the command from your terminal:
 
 ```bash
-./musicplayer.py
-# OR if installed globally:
 musicplayer
 ```
 
@@ -56,14 +64,15 @@ musicplayer
 
 | Key | Action |
 | :--- | :--- |
-| **Arrow Up/Down** | Navigate files |
+| **Arrow Up/Down** | Navigate files / Scroll Lyrics |
 | **Enter** | Play file / Open directory |
 | **Space** | Play / Pause |
+| **l** | Toggle Lyrics View |
 | **n** | Next Track |
-| **p** | Previous Track (History-aware in Shuffle) |
+| **p** | Previous Track (History-aware) |
 | **z** | Toggle Shuffle Mode |
-| **R** (Shift+r) | Load Recursive Library (all subfolders) |
-| **B** (Shift+b) | Return to Browser Mode |
+| **R** | Load Recursive Library (all subfolders) |
+| **B** | Return to Browser Mode |
 | **+ / -** | Volume Up / Down |
 | **Tab** | Toggle "Now Playing" View |
 | **s** | Stop |
