@@ -420,6 +420,16 @@ class MusicPlayer:
             idx -= 1
         return None
 
+    def handle_end_of_file(self):
+        if self.playing_index != -1:
+             next_idx = self.get_next_index(self.playing_index)
+             if next_idx is not None:
+                 # Auto-play next
+                 self.play_file(next_idx)
+             else:
+                 # End of playlist
+                 self.stop_music()
+
     def get_position(self):
         if self.playing_index == -1: return 0
         if self.paused:
