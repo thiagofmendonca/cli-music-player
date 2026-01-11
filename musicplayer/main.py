@@ -619,7 +619,8 @@ class MusicPlayer:
             elif key == ord('l'): self.show_lyrics = not self.show_lyrics
             elif key == ord('n'): self.play_next()
             elif key == ord('p'): self.play_prev()
-            elif key == 10 and self.view_mode == 'browser':
+            
+            self.stdscr.refresh()
 
 def main():
     curses.wrapper(lambda s: MusicPlayer(s).run())
