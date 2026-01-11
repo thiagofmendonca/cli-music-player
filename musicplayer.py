@@ -101,6 +101,18 @@ class MusicPlayer:
         except:
             pass
 
+    def parse_lrc(self, lrc_text):
+        parsed = []
+        # Regex for [mm:ss.xx]Text
+        pattern = re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\](.*)')
+        for line in lrc_text.splitlines():
+            match = pattern.match(line)
+            if match:
+                minutes = float(match.group(1))
+                seconds = float(match.group(2))
+                text = match.group(3).strip()
+                timestamp = minutes * 60 + seconds
+                parsed.append({'time': timestamp, 'text': text})
         return parsed
 
     def slugify(self, text):
@@ -125,7 +137,7 @@ class MusicPlayer:
             # Browser User-Agent is required to avoid 403
             req.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36')
             
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 html = response.read().decode('utf-8', errors='ignore')
                 
                 # Extract lyrics div: <div class="cnt-letra p402_premium">...</div>
@@ -207,7 +219,7 @@ class MusicPlayer:
                 try:
                     req = urllib.request.Request(url)
                     req.add_header('User-Agent', 'CLI-Music-Player/1.0')
-                    with urllib.request.urlopen(req, timeout=5) as response:
+                    with urllib.request.urlopen(req, timeout=10) as response:
                         data = json.loads(response.read().decode())
                         if data.get('syncedLyrics'):
                             parsed = self.parse_lrc(data['syncedLyrics'])
@@ -236,7 +248,7 @@ class MusicPlayer:
                         req = urllib.request.Request(url)
                         req.add_header('User-Agent', 'CLI-Music-Player/1.0')
                         
-                        with urllib.request.urlopen(req, timeout=5) as response:
+                        with urllib.request.urlopen(req, timeout=10) as response:
                             data = json.loads(response.read().decode())
                             # Look for first result with synced lyrics
                             best_match = None
@@ -284,7 +296,7 @@ class MusicPlayer:
                 try:
                     url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist)}/{urllib.parse.quote(title)}"
                     req = urllib.request.Request(url)
-                    with urllib.request.urlopen(req, timeout=5) as response:
+                    with urllib.request.urlopen(req, timeout=10) as response:
                         data = json.loads(response.read().decode())
                         raw = data.get('lyrics', '')
                         if raw:
