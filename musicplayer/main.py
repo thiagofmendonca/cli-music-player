@@ -13,6 +13,7 @@ import socket
 import json
 import tempfile
 import subprocess
+import atexit
 
 from .utils import slugify, format_time, parse_lrc
 from .search import OnlineSearcher
@@ -103,6 +104,7 @@ class MusicPlayer:
         self.stdscr.timeout(100)
 
         # Cleanup hooks
+        atexit.register(self.cleanup)
         signal.signal(signal.SIGINT, self.handle_signal)
         signal.signal(signal.SIGTERM, self.handle_signal)
 
@@ -120,13 +122,24 @@ class MusicPlayer:
         if self.mpv_process:
             try:
                 self.send_ipc_command(["quit"])
-                self.mpv_process.wait(timeout=1)
+                # Wait briefly then force kill
+                try: self.mpv_process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired: self.mpv_process.kill()
             except:
                 try: self.mpv_process.kill()
                 except: pass
+            self.mpv_process = None
+            
         if os.path.exists(self.ipc_socket):
             try: os.remove(self.ipc_socket)
             except: pass
+        
+        # Cleanup Cache
+        try:
+            cache_dir = os.path.join(tempfile.gettempdir(), "musicplayer_cthulhu_cache")
+            if os.path.exists(cache_dir):
+                shutil.rmtree(cache_dir)
+        except: pass
 
     def send_ipc_command(self, command):
         if not os.path.exists(self.ipc_socket): return None
@@ -604,6 +617,9 @@ class MusicPlayer:
             elif key == curses.KEY_UP: self.selected_index -= 1
             elif key == ord(' '): self.toggle_pause()
             elif key == ord('l'): self.show_lyrics = not self.show_lyrics
+            elif key == ord('n'): self.play_next()
+            elif key == ord('p'): self.play_prev()
+            elif key == 10 and self.view_mode == 'browser':
 
 def main():
     curses.wrapper(lambda s: MusicPlayer(s).run())
