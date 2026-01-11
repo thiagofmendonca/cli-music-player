@@ -616,17 +616,6 @@ class MusicPlayer:
             except Exception as e:
                 # print(f"Stream Error: {e}")
                 pass
-                    # Play
-                    pygame.mixer.music.load(downloaded_path)
-                    pygame.mixer.music.play()
-                    pygame.mixer.music.set_volume(self.volume)
-                    
-                    # Fetch lyrics
-                    threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
-                
-            except Exception as e:
-                # print(f"Stream Error: {e}")
-                pass
 
         threading.Thread(target=buffer_and_play, daemon=True).start()
 
