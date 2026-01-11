@@ -103,8 +103,14 @@ class MusicPlayer:
         try:
             pygame.mixer.music.stop()
             pygame.mixer.quit()
-        except:
-            pass
+        except: pass
+        
+        # Cleanup Cache
+        try:
+            cache_dir = os.path.join(tempfile.gettempdir(), "musicplayer_cthulhu_cache")
+            if os.path.exists(cache_dir):
+                shutil.rmtree(cache_dir)
+        except: pass
 
     def fetch_from_letras_mus_br(self, artist, title):
         try:
@@ -549,32 +555,31 @@ class MusicPlayer:
 
         def buffer_and_play():
             try:
-                # Download directly using yt-dlp
-                # This is more robust than extracting URL because yt-dlp handles the complex deciphering/throttling
                 import yt_dlp
                 
-                cache_dir = tempfile.gettempdir()
-                cache_base = os.path.join(cache_dir, f"gemini_music_cache_{os.getpid()}")
-                # Add template for ext
+                # Dedicated cache directory
+                cache_dir = os.path.join(tempfile.gettempdir(), "musicplayer_cthulhu_cache")
+                if not os.path.exists(cache_dir):
+                    os.makedirs(cache_dir)
+                
+                # Unique filename base
+                cache_base = os.path.join(cache_dir, f"track_{int(time.time())}")
                 out_tmpl = cache_base + ".%(ext)s"
                 
-                # Cleanup previous cache
+                # Clear old files in this dir to prevent confusion
                 for f in os.listdir(cache_dir):
-                    if f.startswith(f"gemini_music_cache_{os.getpid()}"):
-                        try: os.remove(os.path.join(cache_dir, f))
-                        except: pass
+                    try: os.remove(os.path.join(cache_dir, f))
+                    except: pass
 
-                # Try different clients strategies
+                # Clients strategies
                 clients_to_try = [
-                    ['ios', 'web'],       # Often works for audio
-                    ['android', 'web'],   # Fallback
-                    ['web'],              # Standard
-                    ['mweb']              # Mobile web
+                    ['android_tv', 'web'], # Often best for audio
+                    ['ios', 'web'],
+                    ['web'],
+                    ['mweb']
                 ]
                 
                 downloaded_path = None
-                
-                # Target: URL is preferred for generic extractors (soundcloud), ID works for youtube
                 target = result.get('url') or result['id']
                 
                 for clients in clients_to_try:
@@ -591,15 +596,19 @@ class MusicPlayer:
                         }
                         
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(target, download=True)
-                            if not info: raise Exception("No info extracted")
-                            ext = info.get('ext', 'mp3')
-                            path = cache_base + "." + ext
-                            if os.path.exists(path) and os.path.getsize(path) > 0:
-                                downloaded_path = path
+                            ydl.extract_info(target, download=True)
+                            
+                            # Find the downloaded file (ignore extension)
+                            for f in os.listdir(cache_dir):
+                                if f.startswith(os.path.basename(cache_base)):
+                                    path = os.path.join(cache_dir, f)
+                                    if os.path.getsize(path) > 0:
+                                        downloaded_path = path
+                                        break
+                            
+                            if downloaded_path:
                                 break
                     except Exception as e:
-                        last_error = e
                         continue
 
                 if downloaded_path and os.path.exists(downloaded_path):
@@ -608,12 +617,10 @@ class MusicPlayer:
                     pygame.mixer.music.play()
                     pygame.mixer.music.set_volume(self.volume)
                     
-                    # Fetch lyrics
                     threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
                 else:
-                    # Failed all attempts
                     self.metadata['title'] = "Playback Error"
-                    self.metadata['artist'] = "Try: 'sudo pacman -S nodejs' or use 'sc:Query'"
+                    self.metadata['artist'] = "Could not download stream. Try 'sc:' search."
                 
             except Exception as e:
                 # print(f"Stream Error: {e}")
