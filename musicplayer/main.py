@@ -564,22 +564,36 @@ class MusicPlayer:
                         try: os.remove(os.path.join(cache_dir, f))
                         except: pass
 
+                # Use android_tv which often bypasses JS requirements/PO Token issues
                 ydl_opts = {
                     'format': 'bestaudio/best', 
                     'quiet': True,
                     'outtmpl': out_tmpl,
                     'overwrites': True,
-                    # Fallback to ios which is often less restricted for audio
-                    'extractor_args': {'youtube': {'player_client': ['ios', 'web']}} 
+                    'extractor_args': {'youtube': {'player_client': ['android_tv', 'web']}},
+                    'nocheckcertificate': True,
                 }
                 
                 downloaded_path = None
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(result['id'], download=True)
-                    # Find the actual filename
-                    ext = info.get('ext', 'mp3')
-                    downloaded_path = cache_base + "." + ext
-                
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(result['id'], download=True)
+                        ext = info.get('ext', 'mp3')
+                        downloaded_path = cache_base + "." + ext
+                except Exception as dl_err:
+                    # If android_tv fails, try generic web as fallback
+                    # print(f"First attempt failed: {dl_err}")
+                    ydl_opts['extractor_args'] = {} # Reset to default
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(result['id'], download=True)
+                            ext = info.get('ext', 'mp3')
+                            downloaded_path = cache_base + "." + ext
+                    except:
+                        self.metadata['title'] = "Error: YouTube requires Node.js/JS runtime"
+                        self.metadata['artist'] = "Please install nodejs"
+                        return
+
                 if downloaded_path and os.path.exists(downloaded_path):
                     # Play
                     pygame.mixer.music.load(downloaded_path)
