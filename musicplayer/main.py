@@ -175,6 +175,26 @@ class MusicPlayer:
             
             time.sleep(0.5)
 
+    def fetch_from_letras_mus_br(self, artist, title):
+        try:
+            slug_artist = slugify(artist)
+            slug_title = slugify(title)
+            url = f"https://www.letras.mus.br/{slug_artist}/{slug_title}/"
+            req = urllib.request.Request(url)
+            req.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36')
+            with urllib.request.urlopen(req, timeout=10) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+                match = re.search(r'<div class="cnt-letra[^\"]*"> (.*?)</div>', html, re.DOTALL)
+                if match:
+                    raw_html = match.group(1)
+                    text = re.sub(r'<br\s*/?>', '\n', raw_html)
+                    text = re.sub(r'<[^>]+>', '', text)
+                    text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
+                    lines = [line.strip() for line in text.split('\n')]
+                    return [{'time': None, 'text': line} for line in lines]
+        except: pass
+        return None
+
     def fetch_lyrics(self, artist, title):
         self.lyrics = [{'time': None, 'text': "Loading lyrics..."}]
         found_lyrics = False
@@ -195,9 +215,10 @@ class MusicPlayer:
         
         # 2. Letras.mus.br fallback
         if not found_lyrics:
-             from .main import MusicPlayer # avoid circular import if needed, but methods are self-contained
-             # Actually let's implement the scraper here briefly or import utils if we moved it
-             pass 
+             res = self.fetch_from_letras_mus_br(artist, title)
+             if res:
+                 self.lyrics = res
+                 found_lyrics = True
 
         if not found_lyrics:
              self.lyrics = [{'time': None, 'text': "Lyrics not found."}]
@@ -262,7 +283,7 @@ class MusicPlayer:
         self.playing_index = -1
         self.metadata = {'title': result['title'], 'artist': result['artist']}
         target = result.get('url') or result['id']
-        if len(target) == 11 and '.' not in target: # Rough ID check
+        if len(target) == 11 and '.' not in target:
              target = f"https://www.youtube.com/watch?v={target}"
         self._start_mpv(target)
         threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
@@ -349,7 +370,7 @@ class MusicPlayer:
         if self.library_mode: mode_str += " [Lib]"
         status = ("PAUSED" if self.paused else "PLAYING") + mode_str
         try:
-            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status, 
+            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status,
                            curses.color_pair(3) if self.paused else curses.color_pair(2))
         except: pass
 
@@ -394,8 +415,8 @@ class MusicPlayer:
                 self.last_anim_time = time.time()
             
             cthulhu_frames = [
-                [" ( o . o ) ", " (  |||  ) ", "/||\/||\/||\"],
-                [" ( O . O ) ", " ( /|||\ ) ", "//||\/||\/\\"]
+                [" ( o . o ) ", " (  |||  ) ", "/||\\/||\\/||\\"],
+                [" ( O . O ) ", " ( /|||\\ ) ", "//||\\/||\\/||\\\\"]
             ]
             
             if not self.paused:
@@ -502,7 +523,8 @@ class MusicPlayer:
         elif key == 27: self.is_searching_input = False
         elif key == 127: 
             if self.search_query: self.search_query.pop()
-        elif 32 <= key <= 126: self.search_query.append(chr(key))
+        elif 32 <= key <= 126:
+            self.search_query.append(chr(key))
 
     def run(self):
         while self.running:
