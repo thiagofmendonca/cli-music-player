@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-music-player-cthulhu"
-version = "0.6.8"
+version = "0.6.9"
 authors = [
   { name="Thiago Mendonça", email="tfariamendonca@gmail.com" },
 ]
@@ -13,7 +13,8 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "yt-dlp>=2023.0.0",
-    "windows-curses; sys_platform == 'win32'"
+    "windows-curses; sys_platform == 'win32'",
+    "py7zr; sys_platform == 'win32'"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
