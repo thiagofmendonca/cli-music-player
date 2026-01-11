@@ -564,37 +564,58 @@ class MusicPlayer:
                         try: os.remove(os.path.join(cache_dir, f))
                         except: pass
 
-                # Use android_tv which often bypasses JS requirements/PO Token issues
-                ydl_opts = {
-                    'format': 'bestaudio/best', 
-                    'quiet': True,
-                    'outtmpl': out_tmpl,
-                    'overwrites': True,
-                    'extractor_args': {'youtube': {'player_client': ['android_tv', 'web']}},
-                    'nocheckcertificate': True,
-                }
+                # Try different clients strategies
+                clients_to_try = [
+                    ['ios', 'web'],       # Often works for audio
+                    ['android', 'web'],   # Fallback
+                    ['web'],              # Standard
+                    ['mweb']              # Mobile web
+                ]
                 
                 downloaded_path = None
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(result['id'], download=True)
-                        ext = info.get('ext', 'mp3')
-                        downloaded_path = cache_base + "." + ext
-                except Exception as dl_err:
-                    # If android_tv fails, try generic web as fallback
-                    # print(f"First attempt failed: {dl_err}")
-                    ydl_opts['extractor_args'] = {} # Reset to default
+                last_error = None
+                
+                for clients in clients_to_try:
                     try:
+                        ydl_opts = {
+                            'format': 'bestaudio/best', 
+                            'quiet': True,
+                            'outtmpl': out_tmpl,
+                            'overwrites': True,
+                            'extractor_args': {'youtube': {'player_client': clients}},
+                            'nocheckcertificate': True,
+                            'ignoreerrors': True,
+                            'no_warnings': True,
+                        }
+                        
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             info = ydl.extract_info(result['id'], download=True)
+                            if not info: raise Exception("No info extracted")
                             ext = info.get('ext', 'mp3')
-                            downloaded_path = cache_base + "." + ext
-                    except:
-                        self.metadata['title'] = "Error: YouTube requires Node.js/JS runtime"
-                        self.metadata['artist'] = "Please install nodejs"
-                        return
+                            path = cache_base + "." + ext
+                            if os.path.exists(path) and os.path.getsize(path) > 0:
+                                downloaded_path = path
+                                break
+                    except Exception as e:
+                        last_error = e
+                        continue
 
                 if downloaded_path and os.path.exists(downloaded_path):
+                    # Play
+                    pygame.mixer.music.load(downloaded_path)
+                    pygame.mixer.music.play()
+                    pygame.mixer.music.set_volume(self.volume)
+                    
+                    # Fetch lyrics
+                    threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
+                else:
+                    # Failed all attempts
+                    self.metadata['title'] = "Playback Error"
+                    self.metadata['artist'] = "Try: 'sudo pacman -S nodejs' or use 'sc:Query'"
+                
+            except Exception as e:
+                # print(f"Stream Error: {e}")
+                pass
                     # Play
                     pygame.mixer.music.load(downloaded_path)
                     pygame.mixer.music.play()
