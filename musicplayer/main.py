@@ -151,17 +151,21 @@ class MusicPlayer:
                 if dur is not None: self.duration = float(dur)
                 
                 # Metadata
+                # Only update if we get valid data, don't overwrite good data with None
                 meta = self.get_property("metadata")
                 if meta:
-                    self.metadata = meta
-                    if 'media-title' in meta and 'title' not in self.metadata:
-                        self.metadata['title'] = meta['media-title']
+                    new_title = meta.get('title') or meta.get('media-title')
+                    new_artist = meta.get('artist')
+                    
+                    if new_title: self.metadata['title'] = new_title
+                    if new_artist: self.metadata['artist'] = new_artist
                 
                 # Fetch lyrics trigger
                 if self.show_lyrics and not self.current_song_lyrics_fetched:
                     artist = self.metadata.get('artist')
                     title = self.metadata.get('title')
-                    if artist and title:
+                    # Don't fetch for "Unknown"
+                    if artist and title and artist != "Unknown" and title != "Unknown":
                         self.current_song_lyrics_fetched = True
                         threading.Thread(target=self.fetch_lyrics, args=(artist, title), daemon=True).start()
 
@@ -528,13 +532,21 @@ class MusicPlayer:
 
     def run(self):
         while self.running:
+            # Use clear() to force a full redraw and prevent artifacts
+            self.stdscr.clear()
+            
             if self.view_mode == 'player': self.draw_player_view()
             elif self.view_mode == 'search_results': self.draw_search_results()
             else: self.draw_browser()
             
             if self.is_searching_input:
-                try: self.stdscr.addstr(0,0, "Search: " + "".join(self.search_query), curses.A_REVERSE)
+                try: 
+                    self.stdscr.addstr(0,0, "Search: " + "".join(self.search_query), curses.A_REVERSE)
+                    # Move cursor to end of input
+                    self.stdscr.move(0, 8 + len(self.search_query))
                 except: pass
+            
+            self.stdscr.refresh()
             
             try: key = self.stdscr.getch()
             except: continue
