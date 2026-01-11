@@ -21,7 +21,7 @@ hidden_yt_dlp = collect_submodules('yt_dlp')
 
 # Build command arguments
 args = [
-    'musicplayer/main.py',
+    'run_musicplayer.py',
     '--name=MusicPlayerCthulhu',
     '--onefile',
     '--clean',
