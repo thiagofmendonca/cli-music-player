@@ -585,7 +585,7 @@ class MusicPlayer:
                 for clients in clients_to_try:
                     try:
                         ydl_opts = {
-                            'format': 'bestaudio/best', 
+                            'format': 'bestaudio[ext=mp3]/bestaudio/best', # Prefer MP3 for Pygame compatibility
                             'quiet': True,
                             'outtmpl': out_tmpl,
                             'overwrites': True,
@@ -598,33 +598,50 @@ class MusicPlayer:
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             ydl.extract_info(target, download=True)
                             
-                            # Find the downloaded file (ignore extension)
+                            # Find the file
                             for f in os.listdir(cache_dir):
                                 if f.startswith(os.path.basename(cache_base)):
                                     path = os.path.join(cache_dir, f)
                                     if os.path.getsize(path) > 0:
                                         downloaded_path = path
                                         break
-                            
-                            if downloaded_path:
-                                break
+                            if downloaded_path: break
                     except Exception as e:
+                        with open("/tmp/musicplayer_error.log", "a") as log:
+                            log.write(f"Download attempt failed ({clients}): {e}\n")
                         continue
 
+                if not downloaded_path:
+                    # Last ditch effort for YouTube: try worst quality (sometimes bypasses restrictions)
+                    try:
+                        ydl_opts['format'] = 'worst'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            ydl.extract_info(target, download=True)
+                            for f in os.listdir(cache_dir):
+                                if f.startswith(os.path.basename(cache_base)):
+                                    downloaded_path = os.path.join(cache_dir, f)
+                                    break
+                    except: pass
+
                 if downloaded_path and os.path.exists(downloaded_path):
-                    # Play
-                    pygame.mixer.music.load(downloaded_path)
-                    pygame.mixer.music.play()
-                    pygame.mixer.music.set_volume(self.volume)
-                    
-                    threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
+                    try:
+                        # Play
+                        pygame.mixer.music.load(downloaded_path)
+                        pygame.mixer.music.play()
+                        pygame.mixer.music.set_volume(self.volume)
+                        threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
+                    except Exception as e:
+                        with open("/tmp/musicplayer_error.log", "a") as log:
+                            log.write(f"Pygame Load Error: {e} | File: {downloaded_path}\n")
+                        self.metadata['title'] = "Playback Error"
+                        self.metadata['artist'] = "Codec not supported by Pygame?"
                 else:
                     self.metadata['title'] = "Playback Error"
-                    self.metadata['artist'] = "Could not download stream. Try 'sc:' search."
+                    self.metadata['artist'] = "Could not download stream. Check /tmp/musicplayer_error.log"
                 
             except Exception as e:
-                # print(f"Stream Error: {e}")
-                pass
+                with open("/tmp/musicplayer_error.log", "a") as log:
+                    log.write(f"General Stream Error: {e}\n")
 
         threading.Thread(target=buffer_and_play, daemon=True).start()
 
