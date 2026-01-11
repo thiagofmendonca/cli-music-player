@@ -50,7 +50,9 @@ class MusicPlayer:
         
         # Pygame State
         try:
-            pygame.mixer.init()
+            # Initialize all of pygame (mixer, fonts, events)
+            pygame.init()
+            pygame.mixer.init() 
         except Exception as e:
             print(f"Audio Error: {e}")
             sys.exit(1)
@@ -787,11 +789,6 @@ class MusicPlayer:
             self.stdscr.refresh()
 
 def main():
-    # Only check if pygame initialized correctly
-    if not pygame.get_init():
-        print("Could not initialize audio mixer.")
-        sys.exit(1)
-        
     try:
         curses.wrapper(lambda stdscr: MusicPlayer(stdscr).run())
     except KeyboardInterrupt:
