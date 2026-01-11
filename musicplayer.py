@@ -11,6 +11,7 @@ import random
 import urllib.request
 import urllib.parse
 import re
+import unicodedata
 
 # Suppress pygame welcome message
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
@@ -100,19 +101,52 @@ class MusicPlayer:
         except:
             pass
 
-    def parse_lrc(self, lrc_text):
-        parsed = []
-        # Regex for [mm:ss.xx]Text
-        pattern = re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\](.*)')
-        for line in lrc_text.splitlines():
-            match = pattern.match(line)
-            if match:
-                minutes = float(match.group(1))
-                seconds = float(match.group(2))
-                text = match.group(3).strip()
-                timestamp = minutes * 60 + seconds
-                parsed.append({'time': timestamp, 'text': text})
         return parsed
+
+    def slugify(self, text):
+        """Convert text to letters-mus-br slug format"""
+        # Normalize unicode characters (remove accents)
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
+        text = text.lower()
+        # Replace non-alphanumeric characters with hyphens (or remove them)
+        # Letras.mus.br logic: spaces become hyphens, special chars are removed
+        text = re.sub(r'[\s\-_]+', '-', text) # Spaces/underscores to hyphens
+        text = re.sub(r'[^\w\-]', '', text)   # Remove other specials
+        return text.strip('-')
+
+    def fetch_from_letras_mus_br(self, artist, title):
+        try:
+            slug_artist = self.slugify(artist)
+            slug_title = self.slugify(title)
+            
+            url = f"https://www.letras.mus.br/{slug_artist}/{slug_title}/"
+            
+            req = urllib.request.Request(url)
+            # Browser User-Agent is required to avoid 403
+            req.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36')
+            
+            with urllib.request.urlopen(req, timeout=5) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+                
+                # Extract lyrics div: <div class="cnt-letra p402_premium">...</div>
+                # Use DOTALL to match newlines
+                match = re.search(r'<div class="cnt-letra[^"]*">(.*?)</div>', html, re.DOTALL)
+                if match:
+                    raw_html = match.group(1)
+                    # Replace <br> tags with newlines
+                    text = re.sub(r'<br\s*/?>', '\n', raw_html)
+                    # Remove other tags like <p>
+                    text = re.sub(r'<[^>]+>', '', text)
+                    # Decode HTML entities if any (basic ones)
+                    text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
+                    
+                    lines = [line.strip() for line in text.split('\n')]
+                    # Remove empty lines from start/end
+                    return [{'time': None, 'text': line} for line in lines]
+        except Exception as e:
+            # print(f"Letras.mus.br failed: {e}")
+            pass
+        return None
 
     def fetch_lyrics(self, artist, title, file_path=None):
         # Debug Logging
@@ -235,8 +269,17 @@ class MusicPlayer:
         except Exception as e:
             with open(debug_log, "a") as f: f.write(f"Global fetch error: {e}\n")
 
+        # 3. Fallback to letras.mus.br (Scraping)
+        if not found_lyrics and artist and title:
+             with open(debug_log, "a") as f: f.write("Trying letras.mus.br fallback...\n")
+             res = self.fetch_from_letras_mus_br(artist, title)
+             if res:
+                 self.lyrics = res
+                 found_lyrics = True
+                 with open(debug_log, "a") as f: f.write("Found via letras.mus.br\n")
+
         if not found_lyrics:
-            # 3. Fallback to lyrics.ovh (Plain only)
+            # 4. Fallback to lyrics.ovh (Plain only)
             if artist and title:
                 try:
                     url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist)}/{urllib.parse.quote(title)}"
