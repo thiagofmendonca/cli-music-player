@@ -2,6 +2,7 @@ import PyInstaller.__main__
 import os
 import shutil
 import sys
+from PyInstaller.utils.hooks import collect_submodules
 
 # Ensure we are in the root
 if not os.path.exists("musicplayer"):
@@ -14,6 +15,9 @@ print("--- Starting Build Process ---")
 print("Cleaning build/dist...")
 shutil.rmtree("build", ignore_errors=True)
 shutil.rmtree("dist", ignore_errors=True)
+
+# Collect all yt_dlp submodules (extractors, etc)
+hidden_yt_dlp = collect_submodules('yt_dlp')
 
 # Build command arguments
 args = [
@@ -29,8 +33,7 @@ args = [
     '--hidden-import=musicplayer.mpv_setup',
     '--hidden-import=musicplayer.search',
     '--hidden-import=musicplayer.utils',
-    '--hidden-import=yt_dlp',
-]
+] + [f'--hidden-import={m}' for m in hidden_yt_dlp]
 
 # Windows specific
 if sys.platform == 'win32':
