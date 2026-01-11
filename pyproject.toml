@@ -4,13 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-music-player-cthulhu"
-version = "0.1.0"
+version = "0.3.0"
 authors = [
   { name="Thiago Mendonça", email="tfariamendonca@gmail.com" },
 ]
 description = "A lightweight terminal music player with a pulsing Cthulhu"
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = [
+    "pygame>=2.5.0",
+    "mutagen>=1.45.0"
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 import curses
 import os
-import subprocess
 import threading
 import time
 import signal
 import sys
-import socket
 import json
 import shutil
-import atexit
-import tempfile
 import random
 import urllib.request
 import urllib.parse
 import re
 
-# Supported audio extensions
+# Suppress pygame welcome message
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
+import mutagen
+
+# Supported audio extensions (Pygame/SDL_mixer supports most of these)
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
 
 class MusicPlayer:
@@ -30,12 +31,12 @@ class MusicPlayer:
         # State
         self.playing_index = -1
         self.paused = False
-        self.volume = 100
+        self.volume = 1.0 # 0.0 to 1.0 in pygame
         self.running = True
         self.view_mode = 'browser' # 'browser' or 'player'
         self.shuffle = False
-        self.library_mode = False # False = Standard Browser, True = Recursive Library
-        self.playback_history = [] # Stack for "Previous" functionality
+        self.library_mode = False 
+        self.playback_history = [] 
         
         # Animation State
         self.anim_frame = 0
@@ -47,11 +48,18 @@ class MusicPlayer:
         self.lyrics_scroll_offset = 0
         self.current_song_lyrics_fetched = False
         
-        # MPV State
-        self.mpv_process = None
-        self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
-        self.duration = 0
-        self.position = 0
+        # Pygame State
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"Audio Error: {e}")
+            sys.exit(1)
+            
+        self.current_track_length = 0
+        self.start_time = 0 # To track position
+        self.pause_start = 0 # To track pause duration
+        self.total_pause_time = 0
+        
         self.metadata = {}
         
         # UI
@@ -63,53 +71,32 @@ class MusicPlayer:
         curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_RED)   # Error
         curses.init_pair(5, curses.COLOR_CYAN, -1)      # Progress Bar
         curses.init_pair(6, curses.COLOR_WHITE, -1)     # Dimmed/Normal text
-        curses.init_pair(7, curses.COLOR_GREEN, -1)     # Cthulhu (Light Green with Bold)
+        curses.init_pair(7, curses.COLOR_GREEN, -1)     # Cthulhu
         curses.curs_set(0)
         self.stdscr.nodelay(1)
         self.stdscr.timeout(100)
 
         # Cleanup hooks
-        atexit.register(self.cleanup)
+        # atexit.register(self.cleanup) # Not strictly needed for pygame but good practice to stop
         signal.signal(signal.SIGINT, self.handle_signal)
         signal.signal(signal.SIGTERM, self.handle_signal)
-        # Catch Ctrl+Z (Suspend) and Ctrl+\ (Quit) to kill mpv before exiting
-        signal.signal(signal.SIGTSTP, self.handle_signal)
-        signal.signal(signal.SIGQUIT, self.handle_signal)
 
         self.scan_directory()
         
-        # Start IPC poller
-        self.ipc_thread = threading.Thread(target=self.ipc_loop, daemon=True)
-        self.ipc_thread.start()
+        # Monitor thread (replaces IPC loop)
+        self.monitor_thread = threading.Thread(target=self.monitor_loop, daemon=True)
+        self.monitor_thread.start()
 
     def handle_signal(self, signum, frame):
         self.cleanup()
         sys.exit(0)
 
     def cleanup(self):
-        """Robust cleanup to ensure no zombie mpv processes"""
-        if self.mpv_process:
-            try:
-                # Send quit command via IPC first if possible
-                self.send_ipc_command(["quit"])
-                time.sleep(0.1)
-                
-                # Force kill if still alive
-                if self.mpv_process.poll() is None:
-                    os.killpg(os.getpgid(self.mpv_process.pid), signal.SIGTERM)
-                    self.mpv_process.wait(timeout=1)
-            except (ProcessLookupError, OSError, subprocess.TimeoutExpired):
-                try:
-                    os.killpg(os.getpgid(self.mpv_process.pid), signal.SIGKILL)
-                except:
-                    pass
-            self.mpv_process = None
-            
-        if os.path.exists(self.ipc_socket):
-            try:
-                os.remove(self.ipc_socket)
-            except:
-                pass
+        try:
+            pygame.mixer.music.stop()
+            pygame.mixer.quit()
+        except:
+            pass
 
     def parse_lrc(self, lrc_text):
         parsed = []
@@ -321,215 +308,115 @@ class MusicPlayer:
             self.selected_index = 0
             self.scroll_offset = 0
 
-    def send_ipc_command(self, command):
-        """Send raw JSON command to MPV socket"""
-        if not os.path.exists(self.ipc_socket):
-            return None
-        
-        try:
-            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            client.connect(self.ipc_socket)
-            message = json.dumps({"command": command}) + '\n'
-            client.sendall(message.encode('utf-8'))
-            
-            # Read response (simple)
-            client.settimeout(0.1)
-            response = b""
-            try:
-                while True:
-                    chunk = client.recv(4096)
-                    if not chunk: break
-                    response += chunk
-                    if b'\n' in chunk: break
-            except socket.timeout:
-                pass
-            
-            client.close()
-            return response
-        except Exception:
-            return None
-
-    def get_property(self, prop):
-        res = self.send_ipc_command(["get_property", prop])
-        if res:
-            try:
-                data = json.loads(res.decode('utf-8').strip())
-                return data.get("data")
-            except:
-                pass
-        return None
-
-    def ipc_loop(self):
-        """Poll MPV for status"""
+    def monitor_loop(self):
+        """Monitor playback status"""
         while self.running:
-            if self.mpv_process and self.mpv_process.poll() is None:
-                # Poll position
-                pos = self.get_property("time-pos")
-                if pos is not None:
-                    self.position = float(pos)
+            if self.playing_index != -1:
+                # Check for end of song
+                if not pygame.mixer.music.get_busy() and not self.paused:
+                    # Give a small buffer to ensure it really finished and wasn't just loading
+                    time.sleep(0.1)
+                    if not pygame.mixer.music.get_busy():
+                        self.handle_end_of_file()
                 
-                # Poll duration
-                dur = self.get_property("duration")
-                if dur is not None:
-                    self.duration = float(dur)
-                    
-                # Poll metadata
-                meta = self.get_property("metadata")
-                if meta:
-                    self.metadata = meta
-                    
-                    # Trigger lyrics fetch if we have enough info and haven't tried yet
-                    if self.show_lyrics and not self.current_song_lyrics_fetched:
-                        artist = self.metadata.get('artist')
-                        title = self.metadata.get('title')
-                        # Also get current filename
-                        file_path = None
-                        if self.playing_index != -1 and self.playing_index < len(self.files):
-                             file_path = os.path.join(self.current_dir, self.files[self.playing_index]['path'])
-                             
-                        if (artist and title) or file_path:
-                            self.current_song_lyrics_fetched = True
-                            threading.Thread(target=self.fetch_lyrics, args=(artist or "", title or "", file_path), daemon=True).start()
-                
-                # Poll pause state
-                paused = self.get_property("pause")
-                if paused is not None:
-                    self.paused = paused
-                
-                # Check end of file
-                idle = self.get_property("idle-active")
-                if idle is True:
-                     # Song finished
-                     self.handle_end_of_file()
+                # Trigger lyrics fetch if needed
+                if self.show_lyrics and not self.current_song_lyrics_fetched:
+                     artist = self.metadata.get('artist')
+                     title = self.metadata.get('title')
+                     file_path = None
+                     if self.playing_index != -1 and self.playing_index < len(self.files):
+                          file_path = os.path.join(self.current_dir, self.files[self.playing_index]['path'])
+                          
+                     if (artist and title) or file_path:
+                         self.current_song_lyrics_fetched = True
+                         threading.Thread(target=self.fetch_lyrics, args=(artist or "", title or "", file_path), daemon=True).start()
 
             time.sleep(0.5)
 
-    def get_next_index(self, current_idx):
-        if self.shuffle:
-            # Get all audio file indices
-            candidates = [i for i, f in enumerate(self.files) if f['type'] == 'file' and i != current_idx]
-            if candidates:
-                return random.choice(candidates)
-            return None
-        else:
-            idx = current_idx + 1
-            while idx < len(self.files):
-                if self.files[idx]['type'] == 'file':
-                    return idx
-                idx += 1
-            return None
-
-    def get_prev_index(self, current_idx):
-        # If we have history, pop from it (Shuffle or Normal)
-        if self.playback_history:
-            # The last item is current song, so we need the one before
-            # But we only push to history when changing.
-            # Let's peek.
-            return self.playback_history[-1]
-            
-        idx = current_idx - 1
-        while idx >= 0:
-            if self.files[idx]['type'] == 'file':
-                return idx
-            idx -= 1
-        return None
-
-    def handle_end_of_file(self):
-        if self.playing_index != -1:
-             next_idx = self.get_next_index(self.playing_index)
-             if next_idx is not None:
-                 self.play_file(next_idx)
-             else:
-                 self.stop_music()
-
-    def play_next(self):
-        if self.playing_index != -1:
-            next_idx = self.get_next_index(self.playing_index)
-            if next_idx is not None:
-                self.play_file(next_idx)
-
-    def play_prev(self):
-        if self.playback_history:
-            prev_idx = self.playback_history.pop()
-            self.play_file(prev_idx, push_history=False)
-        else:
-            # Fallback to linear prev if no history
-            if self.playing_index != -1:
-                idx = self.playing_index - 1
-                while idx >= 0:
-                    if self.files[idx]['type'] == 'file':
-                        self.play_file(idx, push_history=False)
-                        return
-                    idx -= 1
-
-    def _preexec_fn(self):
-        # Ensure the child process receives SIGTERM if the parent dies
-        import ctypes
-        libc = ctypes.CDLL("libc.so.6")
-        PR_SET_PDEATHSIG = 1
-        libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
-        # Still create a new session
-        os.setsid()
+    def get_position(self):
+        if self.playing_index == -1: return 0
+        if self.paused:
+            # If paused, position is locked at pause_start relative to start_time and total_pause
+            # Actually simplest way: track 'accumulated_time'
+            return (self.pause_start - self.start_time - self.total_pause_time) 
+        
+        # Pygame get_pos returns ms played. It DOES NOT reset on pause usually, 
+        # but docs say "time since the music was started".
+        # Reliable way: pygame.mixer.music.get_pos() / 1000.0
+        # However, get_pos() returns -1 if not playing.
+        
+        pos_ms = pygame.mixer.music.get_pos()
+        if pos_ms == -1: return 0
+        return pos_ms / 1000.0
 
     def play_file(self, index, push_history=True):
-        self.cleanup() # Stop current
-        
         if 0 <= index < len(self.files) and self.files[index]['type'] == 'file':
             # Add current song to history before switching
             if push_history and self.playing_index != -1:
                 self.playback_history.append(self.playing_index)
-                # Keep history manageable
                 if len(self.playback_history) > 50:
                     self.playback_history.pop(0)
 
             self.playing_index = index
-            # Path handling: join current_dir with the relative path stored in item
             file_path = os.path.join(self.current_dir, self.files[index]['path'])
-            self.metadata = {} # Reset metadata
+            self.metadata = {}
             self.lyrics = None
             self.lyrics_scroll_offset = 0
             self.current_song_lyrics_fetched = False
             
+            # Load Metadata with Mutagen
             try:
-                # Start MPV with IPC
-                cmd = [
-                    'mpv',
-                    '--no-video',
-                    f'--input-ipc-server={self.ipc_socket}',
-                    f'--volume={self.volume}',
-                    '--volume-max=200',
-                    '--idle', # Keep mpv running even after file ends
-                    file_path
-                ]
-                
-                self.mpv_process = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    preexec_fn=self._preexec_fn
-                )
+                audio = mutagen.File(file_path, easy=True)
+                if audio:
+                    self.metadata['title'] = audio.get('title', [None])[0] or os.path.basename(file_path)
+                    self.metadata['artist'] = audio.get('artist', [None])[0] or "Unknown Artist"
+                    # Mutagen length is in seconds (float)
+                    if hasattr(audio, 'info') and hasattr(audio.info, 'length'):
+                        self.current_track_length = audio.info.length
+                    else:
+                        self.current_track_length = 0
+                else:
+                    self.metadata['title'] = os.path.basename(file_path)
+                    self.metadata['artist'] = "Unknown"
+                    self.current_track_length = 0
+            except:
+                self.metadata['title'] = os.path.basename(file_path)
+                self.metadata['artist'] = "Unknown"
+                self.current_track_length = 0
+            
+            try:
+                pygame.mixer.music.load(file_path)
+                pygame.mixer.music.play()
+                pygame.mixer.music.set_volume(self.volume)
                 self.paused = False
-                self.view_mode = 'player' # Switch to player view
+                self.view_mode = 'player'
+                
+                # Reset timing trackers if we were using custom logic, 
+                # but get_pos() is usually sufficient for simple playback
             except Exception as e:
+                # Show error somewhere?
                 pass
 
     def stop_music(self):
-        self.cleanup()
+        pygame.mixer.music.stop()
         self.playing_index = -1
         self.paused = False
-        self.position = 0
-        self.duration = 0
         self.view_mode = 'browser'
 
     def toggle_pause(self):
-        if self.mpv_process:
-            self.send_ipc_command(["cycle", "pause"])
+        if self.playing_index != -1:
+            if self.paused:
+                pygame.mixer.music.unpause()
+                self.paused = False
+            else:
+                pygame.mixer.music.pause()
+                self.paused = True
 
     def change_volume(self, delta):
-        self.volume = max(0, min(200, self.volume + delta))
-        if self.mpv_process:
-            self.send_ipc_command(["set_property", "volume", self.volume])
+        # Delta is +/- 5 (from original 0-100 scale)
+        # Pygame volume is 0.0 to 1.0
+        self.volume = max(0.0, min(1.0, self.volume + (delta / 100.0)))
+        pygame.mixer.music.set_volume(self.volume)
 
     def format_time(self, seconds):
         if seconds is None: return "00:00"
@@ -538,16 +425,19 @@ class MusicPlayer:
         return f"{mins:02d}:{secs:02d}"
 
     def draw_progress_bar(self, y, width):
-        if self.duration <= 0:
+        duration = self.current_track_length
+        position = self.get_position()
+        
+        if duration <= 0:
             pct = 0
         else:
-            pct = self.position / self.duration
+            pct = min(1.0, position / duration)
         
         bar_width = width - 20 # Space for timestamps
         fill_width = int(bar_width * pct)
         
         bar = "[" + "=" * fill_width + "-" * (bar_width - fill_width) + "]"
-        time_str = f"{self.format_time(self.position)} / {self.format_time(self.duration)}"
+        time_str = f"{self.format_time(position)} / {self.format_time(duration)}"
         
         try:
             self.stdscr.addstr(y, 2, f"{bar} {time_str}", curses.color_pair(5))
@@ -572,9 +462,8 @@ class MusicPlayer:
         
         if self.playing_index != -1:
             # Current
-            title = self.files[self.playing_index]['name']
-            if 'title' in self.metadata: title = self.metadata['title']
-            if 'artist' in self.metadata: artist = self.metadata['artist']
+            title = self.metadata.get('title', self.files[self.playing_index]['name'])
+            artist = self.metadata.get('artist', "Unknown Artist")
             
             # Prev info (Logical or History)
             if self.playback_history:
@@ -635,10 +524,11 @@ class MusicPlayer:
                 
                 if is_synced:
                     # Find current line based on position
-                    # We want the last line where time <= self.position
+                    pos = self.get_position()
+                    # We want the last line where time <= pos
                     found_idx = -1
                     for i, line in enumerate(self.lyrics):
-                         if line['time'] is not None and line['time'] <= self.position:
+                         if line['time'] is not None and line['time'] <= pos:
                              found_idx = i
                          else:
                              break
@@ -724,7 +614,7 @@ class MusicPlayer:
         self.draw_progress_bar(center_y + 4, width - 4)
         
         # 6. Volume
-        vol_str = f"Volume: {self.volume}%"
+        vol_str = f"Volume: {int(self.volume * 100)}%"
         try:
             self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
         except: pass
@@ -896,43 +786,12 @@ class MusicPlayer:
 
             self.stdscr.refresh()
 
-def check_dependencies():
-    if shutil.which('mpv'): return True
-    print("MPV player not found. Attempting to install...")
-    distro_id = "unknown"
-    try:
-        if os.path.exists("/etc/os-release"):
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if line.startswith("ID="):
-                        distro_id = line.strip().split("=")[1].strip('"')
-                        break
-    except: pass
-
-    cmd = []
-    if distro_id in ["ubuntu", "debian", "linuxmint", "pop", "kali"]:
-        cmd = ["sudo", "apt-get", "install", "-y", "mpv"]
-    elif distro_id in ["fedora", "centos", "rhel"]:
-        cmd = ["sudo", "dnf", "install", "-y", "mpv"]
-    elif distro_id in ["arch", "manjaro"]:
-        cmd = ["sudo", "pacman", "-S", "--noconfirm", "mpv"]
-    elif distro_id in ["opensuse", "suse"]:
-        cmd = ["sudo", "zypper", "install", "-y", "mpv"]
-    elif distro_id in ["alpine"]:
-        cmd = ["sudo", "apk", "add", "mpv"]
-    else:
-        print(f"Manual installation required for distro: {distro_id}")
-        return False
-
-    try:
-        subprocess.check_call(cmd)
-        return True
-    except:
-        return False
-
 def main():
-    if not check_dependencies():
+    # Only check if pygame initialized correctly
+    if not pygame.get_init():
+        print("Could not initialize audio mixer.")
         sys.exit(1)
+        
     try:
         curses.wrapper(lambda stdscr: MusicPlayer(stdscr).run())
     except KeyboardInterrupt:

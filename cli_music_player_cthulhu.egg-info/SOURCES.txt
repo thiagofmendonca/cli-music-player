@@ -1,0 +1,9 @@
+LICENSE
+README.md
+musicplayer.py
+pyproject.toml
+cli_music_player_cthulhu.egg-info/PKG-INFO
+cli_music_player_cthulhu.egg-info/SOURCES.txt
+cli_music_player_cthulhu.egg-info/dependency_links.txt
+cli_music_player_cthulhu.egg-info/entry_points.txt
+cli_music_player_cthulhu.egg-info/top_level.txt
