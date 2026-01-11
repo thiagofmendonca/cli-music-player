@@ -549,33 +549,45 @@ class MusicPlayer:
 
         def buffer_and_play():
             try:
-                # Use yt-dlp to get the actual stream URL
+                # Download directly using yt-dlp
+                # This is more robust than extracting URL because yt-dlp handles the complex deciphering/throttling
                 import yt_dlp
-                # Use android client to avoid JS engine requirement
+                
+                cache_dir = tempfile.gettempdir()
+                cache_base = os.path.join(cache_dir, f"gemini_music_cache_{os.getpid()}")
+                # Add template for ext
+                out_tmpl = cache_base + ".%(ext)s"
+                
+                # Cleanup previous cache
+                for f in os.listdir(cache_dir):
+                    if f.startswith(f"gemini_music_cache_{os.getpid()}"):
+                        try: os.remove(os.path.join(cache_dir, f))
+                        except: pass
+
                 ydl_opts = {
                     'format': 'bestaudio/best', 
                     'quiet': True,
-                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                    'outtmpl': out_tmpl,
+                    'overwrites': True,
+                    # Fallback to ios which is often less restricted for audio
+                    'extractor_args': {'youtube': {'player_client': ['ios', 'web']}} 
                 }
+                
+                downloaded_path = None
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(result['id'], download=False)
-                    url = info['url']
+                    info = ydl.extract_info(result['id'], download=True)
+                    # Find the actual filename
+                    ext = info.get('ext', 'mp3')
+                    downloaded_path = cache_base + "." + ext
                 
-                # Download to temp file
-                cache_path = os.path.join(tempfile.gettempdir(), f"gemini_music_cache_{os.getpid()}.mp3")
-                
-                req = urllib.request.Request(url)
-                # Stream download (blocking for now, can be improved)
-                with urllib.request.urlopen(req) as response, open(cache_path, 'wb') as out_file:
-                    shutil.copyfileobj(response, out_file)
-                
-                # Play
-                pygame.mixer.music.load(cache_path)
-                pygame.mixer.music.play()
-                pygame.mixer.music.set_volume(self.volume)
-                
-                # Fetch lyrics
-                threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
+                if downloaded_path and os.path.exists(downloaded_path):
+                    # Play
+                    pygame.mixer.music.load(downloaded_path)
+                    pygame.mixer.music.play()
+                    pygame.mixer.music.set_volume(self.volume)
+                    
+                    # Fetch lyrics
+                    threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
                 
             except Exception as e:
                 # print(f"Stream Error: {e}")
@@ -687,18 +699,21 @@ class MusicPlayer:
         while self.running:
             self.stdscr.erase()
             
+            # Draw background view first
+            if self.view_mode == 'player': self.draw_player_view()
+            elif self.view_mode == 'search_results': self.draw_search_results()
+            else: self.draw_browser()
+
+            # Draw search prompt on top if active
             if self.is_searching_input:
                 h, w = self.stdscr.getmaxyx()
                 try:
+                    # Clear line first
+                    self.stdscr.move(h-1, 0)
+                    self.stdscr.clrtoeol()
                     prompt = "Search (yt/sc): " + "".join(self.search_query)
                     self.stdscr.addstr(h-1, 0, prompt, curses.color_pair(1))
                 except: pass
-                # Still draw browser or player in background
-                if self.view_mode == 'player': self.draw_player_view()
-                else: self.draw_browser()
-            elif self.view_mode == 'player': self.draw_player_view()
-            elif self.view_mode == 'search_results': self.draw_search_results()
-            else: self.draw_browser()
             
             try: key = self.stdscr.getch()
             except: continue

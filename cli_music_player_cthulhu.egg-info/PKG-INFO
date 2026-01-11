@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cli-music-player-cthulhu
-Version: 0.4.1
+Version: 0.4.2
 Summary: A lightweight terminal music player with a pulsing Cthulhu
 Author-email: Thiago Mendonça <tfariamendonca@gmail.com>
 Classifier: Programming Language :: Python :: 3
