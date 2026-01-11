@@ -28,9 +28,6 @@ class MusicPlayer:
         self.stdscr = stdscr
         
         # Determine start directory
-        # 1. Command line argument
-        # 2. Config 'default_dir'
-        # 3. Current working directory
         self.config = load_config()
         start_dir = os.getcwd()
         
@@ -43,7 +40,7 @@ class MusicPlayer:
         self.files = []
         self.selected_index = 0
         self.scroll_offset = 0
-        self.message = "" # For status messages (e.g. "Default Saved")
+        self.message = "" 
         self.message_time = 0
         
         # Check MPV
@@ -89,7 +86,7 @@ class MusicPlayer:
         self.anim_frame = 0
         self.last_anim_time = time.time()
         
-        # UI
+        # UI Colors
         curses.start_color()
         curses.use_default_colors()
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
@@ -122,7 +119,6 @@ class MusicPlayer:
         if self.mpv_process:
             try:
                 self.send_ipc_command(["quit"])
-                # Wait briefly then force kill
                 try: self.mpv_process.wait(timeout=0.5)
                 except subprocess.TimeoutExpired: self.mpv_process.kill()
             except:
@@ -173,36 +169,28 @@ class MusicPlayer:
     def ipc_loop(self):
         while self.running:
             if self.mpv_process and self.mpv_process.poll() is None:
-                # Poll position/duration
                 pos = self.get_property("time-pos")
                 if pos is not None: self.position = float(pos)
                 dur = self.get_property("duration")
                 if dur is not None: self.duration = float(dur)
                 
-                # Metadata
-                # Only update if we get valid data, don't overwrite good data with None
                 meta = self.get_property("metadata")
                 if meta:
                     new_title = meta.get('title') or meta.get('media-title')
                     new_artist = meta.get('artist')
-                    
                     if new_title: self.metadata['title'] = new_title
                     if new_artist: self.metadata['artist'] = new_artist
                 
-                # Fetch lyrics trigger
                 if self.show_lyrics and not self.current_song_lyrics_fetched:
                     artist = self.metadata.get('artist')
                     title = self.metadata.get('title')
-                    # Don't fetch for "Unknown"
                     if artist and title and artist != "Unknown" and title != "Unknown":
                         self.current_song_lyrics_fetched = True
                         threading.Thread(target=self.fetch_lyrics, args=(artist, title), daemon=True).start()
 
-                # Pause state
                 paused = self.get_property("pause")
                 if paused is not None: self.paused = paused
                 
-                # EOF
                 idle = self.get_property("idle-active")
                 if idle is True: self.handle_end_of_file()
             
@@ -213,8 +201,7 @@ class MusicPlayer:
             slug_artist = slugify(artist)
             slug_title = slugify(title)
             url = f"https://www.letras.mus.br/{slug_artist}/{slug_title}/"
-            req = urllib.request.Request(url)
-            req.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36')
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
                 html = response.read().decode('utf-8', errors='ignore')
                 match = re.search(r'<div class="cnt-letra[^\"]*"> (.*?)</div>', html, re.DOTALL)
@@ -231,12 +218,10 @@ class MusicPlayer:
     def fetch_lyrics(self, artist, title):
         self.lyrics = [{'time': None, 'text': "Loading lyrics..."}]
         found_lyrics = False
-        
-        # 1. LRCLib
         try:
             url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(artist)}&track_name={urllib.parse.quote(title)}"
             req = urllib.request.Request(url, headers={'User-Agent': 'CLI-Music-Player/1.0'})
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode())
                 if data.get('syncedLyrics'):
                     self.lyrics = parse_lrc(data['syncedLyrics'])
@@ -246,7 +231,6 @@ class MusicPlayer:
                     found_lyrics = True
         except: pass
         
-        # 2. Letras.mus.br fallback
         if not found_lyrics:
              res = self.fetch_from_letras_mus_br(artist, title)
              if res:
@@ -267,8 +251,7 @@ class MusicPlayer:
                 if os.path.isdir(full_path) and not item.startswith('.'):
                     self.files.append({'name': item, 'type': 'dir', 'path': item})
                 elif os.path.isfile(full_path):
-                    ext = os.path.splitext(item)[1].lower()
-                    if ext in AUDIO_EXTENSIONS:
+                    if os.path.splitext(item)[1].lower() in AUDIO_EXTENSIONS:
                         self.files.append({'name': item, 'type': 'file', 'path': item})
             self.selected_index = 0
             self.scroll_offset = 0
@@ -309,21 +292,26 @@ class MusicPlayer:
                 self.playback_history.append(self.playing_index)
             self.playing_index = index
             path = os.path.join(self.current_dir, self.files[index]['path'])
+            self.metadata = {'title': self.files[index]['name'], 'artist': 'Local File'}
             self._start_mpv(path)
 
     def play_stream(self, result):
         self.cleanup()
         self.playing_index = -1
         self.metadata = {'title': result['title'], 'artist': result['artist']}
+        self.current_song_lyrics_fetched = False
         target = result.get('url') or result['id']
         if len(target) == 11 and '.' not in target:
              target = f"https://www.youtube.com/watch?v={target}"
         self._start_mpv(target)
-        threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
+        if self.show_lyrics:
+            threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
 
     def _start_mpv(self, target):
         self.paused = False
         self.view_mode = 'player'
+        self.position = 0
+        self.duration = 0
         cmd = [
             self.mpv_bin,
             '--no-video',
@@ -333,18 +321,13 @@ class MusicPlayer:
             target
         ]
         self.mpv_process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
 
     def stop_music(self):
         self.cleanup()
         self.playing_index = -1
         self.paused = False
-        self.position = 0
-        self.duration = 0
         self.view_mode = 'browser'
 
     def handle_end_of_file(self):
@@ -369,29 +352,9 @@ class MusicPlayer:
 
         title = self.metadata.get('title', "Unknown")
         artist = self.metadata.get('artist', "Unknown")
-        prev_name, next_name = "", ""
-        
-        if self.playing_index != -1:
-            if self.playback_history:
-                 p_idx = self.playback_history[-1]
-                 if 0 <= p_idx < len(self.files): prev_name = f"Prev: {self.files[p_idx]['name']}"
-            else:
-                p_idx = self.playing_index - 1
-                if 0 <= p_idx < len(self.files) and self.files[p_idx]['type'] == 'file': prev_name = f"Prev: {self.files[p_idx]['name']}"
-            
-            if self.shuffle: next_name = "Next: Random"
-            else:
-                n_idx = self.get_next_index(self.playing_index)
-                if n_idx is not None: next_name = f"Next: {self.files[n_idx]['name']}"
-            
         center_y = height // 2
         
-        if prev_name and center_y - 8 > 0:
-            try:
-                self.stdscr.addstr(center_y - 8, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
-                self.stdscr.addstr(center_y - 7, (width - 1) // 2, "^", curses.A_DIM)
-            except: pass
-
+        # 1. Current Track
         try:
             self.stdscr.attron(curses.A_BOLD)
             self.stdscr.addstr(center_y - 5, max(0, (width - len(title)) // 2), title[:width])
@@ -399,14 +362,14 @@ class MusicPlayer:
             self.stdscr.addstr(center_y - 4, max(0, (width - len(artist)) // 2), artist[:width])
         except: pass
         
-        mode_str = " [Shuffle]" if self.shuffle else ""
-        if self.library_mode: mode_str += " [Lib]"
-        status = ("PAUSED" if self.paused else "PLAYING") + mode_str
+        # 2. Status
+        status = ("PAUSED" if self.paused else "PLAYING") + (" [Shuffle]" if self.shuffle else "")
         try:
-            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status,
+            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status, 
                            curses.color_pair(3) if self.paused else curses.color_pair(2))
         except: pass
 
+        # 3. Cthulhu or Lyrics
         if self.show_lyrics:
             lyrics_height = 10
             start_y = center_y - 2
@@ -421,66 +384,45 @@ class MusicPlayer:
                     if found_idx != -1: current_line_idx = found_idx
                     target_offset = current_line_idx - (lyrics_height // 2)
                     self.lyrics_scroll_offset = max(0, min(len(self.lyrics) - 1, target_offset))
-                
                 for i in range(lyrics_height):
                     line_idx = self.lyrics_scroll_offset + i
                     if 0 <= line_idx < len(self.lyrics):
-                        line_data = self.lyrics[line_idx]
-                        line_text = line_data['text'].strip()
+                        line_text = self.lyrics[line_idx]['text'].strip()
                         style = curses.color_pair(6)
                         if is_synced and line_idx == current_line_idx:
                             style = curses.color_pair(2) | curses.A_BOLD
                             line_text = ">> " + line_text
                         try: self.stdscr.addstr(start_y + i, max(0, (width - len(line_text)) // 2), line_text[:width], style)
                         except: pass
-                
-                if len(self.lyrics) > lyrics_height:
-                    scroll_pct = self.lyrics_scroll_offset / (len(self.lyrics) - lyrics_height)
-                    try: self.stdscr.addstr(start_y + int(lyrics_height * scroll_pct), width - 2, "|", curses.A_DIM)
-                    except: pass
             else:
-                 msg = "Fetching lyrics..." if self.current_song_lyrics_fetched else "Lyrics (Waiting for Metadata...)"
+                 msg = "Fetching lyrics..." if self.current_song_lyrics_fetched else "Lyrics (Waiting...)"
                  try: self.stdscr.addstr(center_y, (width - len(msg)) // 2, msg, curses.A_DIM)
                  except: pass
         else:
             if time.time() - self.last_anim_time > 0.4:
                 self.anim_frame = (self.anim_frame + 1) % 2
                 self.last_anim_time = time.time()
-            
             cthulhu_frames = [
                 [" ( o . o ) ", " (  |||  ) ", "/||\\/||\\/||\\"],
                 [" ( O . O ) ", " ( /|||\\ ) ", "//||\\/||\\/||\\\\"]
             ]
-            
-            if not self.paused:
-                art = cthulhu_frames[self.anim_frame]
-                for i, line in enumerate(art):
-                    try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_BOLD)
-                    except: pass
-            else:
-                 art = [" ( - . - ) ", " (  zzz  ) ", "  |||||||  "]
-                 for i, line in enumerate(art):
-                    try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_DIM)
-                    except: pass
+            art = cthulhu_frames[self.anim_frame] if not self.paused else [" ( - . - ) ", " (  zzz  ) ", "  |||||||  "]
+            for i, line in enumerate(art):
+                try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | (curses.A_BOLD if not self.paused else curses.A_DIM))
+                except: pass
 
         self.draw_progress_bar(center_y + 4, width - 4)
         vol_str = f"Volume: {int(self.volume)}%"
         try: self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
         except: pass
 
-        if next_name and center_y + 9 < height - 1:
-             try:
-                 self.stdscr.addstr(center_y + 8, (width - 1) // 2, "v", curses.A_DIM)
-                 self.stdscr.addstr(center_y + 9, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
-             except: pass
-
-        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Browser"
+        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Back"
         try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
 
     def draw_progress_bar(self, y, width):
         if self.duration <= 0: pct = 0
-        else: pct = self.position / self.duration
+        else: pct = min(1.0, self.position / self.duration)
         bar_width = width - 20
         fill_width = int(bar_width * pct)
         bar = "[" + "=" * fill_width + "-" * (bar_width - fill_width) + "]"
@@ -490,70 +432,41 @@ class MusicPlayer:
 
     def draw_browser(self):
         height, width = self.stdscr.getmaxyx()
-        mode_title = "LIBRARY (Recursive)" if self.library_mode else f"Browser: {self.current_dir}"
-        if self.shuffle: mode_title += " [SHUFFLE]"
         try:
             self.stdscr.attron(curses.color_pair(1))
-            self.stdscr.addstr(0, 0, f" {mode_title} " + " " * (width - len(mode_title) - 3))
+            self.stdscr.addstr(0, 0, f" Browser: {self.current_dir} ".ljust(width))
             self.stdscr.attroff(curses.color_pair(1))
         except: pass
-        
-        list_height = height - 2
-        for i in range(list_height):
+        for i in range(height - 2):
             file_idx = i + self.scroll_offset
             if file_idx >= len(self.files): break
-            item = self.files[file_idx]
-            name = item['name']
-            if item['type'] == 'dir': name += "/"
-            style = curses.A_NORMAL
-            prefix = "  "
-            if item['type'] == 'dir': style = curses.color_pair(3)
-            if self.playing_index != -1 and self.files[self.playing_index] == item:
-                style = curses.color_pair(2) | curses.A_BOLD
-                prefix = ">>"
-            if file_idx == self.selected_index: style = curses.color_pair(1)
-            try:
-                line = f"{prefix} {name}"
-                self.stdscr.addstr(i + 1, 0, line[:width], style)
+            style = curses.color_pair(1) if file_idx == self.selected_index else curses.A_NORMAL
+            try: self.stdscr.addstr(i + 1, 0, f"  {self.files[file_idx]['name']}"[:width], style)
             except: pass
-                
-        if self.playing_index != -1:
-            status = f" Playing: {self.files[self.playing_index]['name']} ({int(self.volume)}%) [TAB to View]"
-            try: self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
-            except: pass
-        else:
-            help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle"
-            try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
-            except: pass
-            
-        # Draw status message if active
+        help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle"
+        try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
+        except: pass
         if time.time() - self.message_time < 2 and self.message:
-            try: 
-                self.stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                self.stdscr.addstr(0, width - len(self.message) - 2, self.message)
-                self.stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+            try: self.stdscr.addstr(0, width - len(self.message) - 2, self.message, curses.color_pair(2) | curses.A_BOLD)
             except: pass
 
     def draw_search_results(self):
-        self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
-        title = f"Search Results: {''.join(self.search_query)}"
         try:
             self.stdscr.attron(curses.color_pair(1))
-            self.stdscr.addstr(0, 0, f" {title} " + " " * (width - len(title) - 3))
+            self.stdscr.addstr(0, 0, f" Search Results ".ljust(width))
             self.stdscr.attroff(curses.color_pair(1))
         except: pass
-        
-        for i, item in enumerate(self.search_results[self.scroll_offset:self.scroll_offset+20]):
-             idx = i + self.scroll_offset
-             style = curses.color_pair(1) if idx == self.selected_index else curses.A_NORMAL
-             name = f"{item['title']} - {item['artist']}"
-             try: self.stdscr.addstr(i+1, 0, name[:width], style)
-             except: pass
-        self.stdscr.refresh()
+        for i in range(height - 2):
+            idx = i + self.scroll_offset
+            if idx >= len(self.search_results): break
+            style = curses.color_pair(1) if idx == self.selected_index else curses.A_NORMAL
+            name = f"{self.search_results[idx]['title']} - {self.search_results[idx]['artist']}"
+            try: self.stdscr.addstr(i+1, 0, f"  {name}"[:width], style)
+            except: pass
 
     def handle_input(self, key):
-        if key == 10: # Enter
+        if key == 10:
             query = "".join(self.search_query)
             if query:
                 self.is_searching_input = False
@@ -561,39 +474,29 @@ class MusicPlayer:
                 source = 'soundcloud' if query.startswith('sc:') else 'youtube'
                 if source == 'soundcloud': query = query[3:]
                 self.search_results = self.searcher.search(query, source)
+                self.selected_index = 0
+                self.scroll_offset = 0
         elif key == 27: self.is_searching_input = False
         elif key == 127: 
             if self.search_query: self.search_query.pop()
-        elif 32 <= key <= 126:
-            self.search_query.append(chr(key))
+        elif 32 <= key <= 126: self.search_query.append(chr(key))
 
     def run(self):
         while self.running:
-            # Use clear() to force a full redraw and prevent artifacts
             self.stdscr.clear()
-            
             if self.view_mode == 'player': self.draw_player_view()
             elif self.view_mode == 'search_results': self.draw_search_results()
             else: self.draw_browser()
-            
             if self.is_searching_input:
-                try: 
-                    self.stdscr.addstr(0,0, "Search: " + "".join(self.search_query), curses.A_REVERSE)
-                    # Move cursor to end of input
-                    self.stdscr.move(0, 8 + len(self.search_query))
+                try: self.stdscr.addstr(0,0, "Search: " + "".join(self.search_query), curses.A_REVERSE)
                 except: pass
-            
             self.stdscr.refresh()
-            
             try: key = self.stdscr.getch()
             except: continue
-            
             if key == -1: continue
-            
             if self.is_searching_input:
                 self.handle_input(key)
                 continue
-                
             if key == ord('q'): 
                 if self.view_mode != 'browser': self.view_mode = 'browser'
                 else: self.running = False
@@ -604,23 +507,27 @@ class MusicPlayer:
             elif key == ord('/'): 
                 self.is_searching_input = True
                 self.search_query = []
-            elif key == 10 and self.view_mode == 'browser':
-                f = self.files[self.selected_index]
-                if f['type'] == 'dir':
-                    if f['name'] == '..': self.current_dir = os.path.dirname(self.current_dir)
-                    else: self.current_dir = os.path.join(self.current_dir, f['path'])
-                    self.scan_directory()
-                else: self.play_file(self.selected_index)
-            elif key == 10 and self.view_mode == 'search_results':
-                if self.search_results: self.play_stream(self.search_results[self.selected_index])
-            elif key == curses.KEY_DOWN: self.selected_index += 1
-            elif key == curses.KEY_UP: self.selected_index -= 1
+            elif key == 10:
+                if self.view_mode == 'browser':
+                    f = self.files[self.selected_index]
+                    if f['type'] == 'dir':
+                        self.current_dir = os.path.abspath(os.path.join(self.current_dir, f['path']))
+                        self.scan_directory()
+                    else: self.play_file(self.selected_index)
+                elif self.view_mode == 'search_results':
+                    if self.search_results: self.play_stream(self.search_results[self.selected_index])
+            elif key == curses.KEY_DOWN:
+                limit = len(self.files) if self.view_mode == 'browser' else len(self.search_results)
+                self.selected_index = min(limit - 1, self.selected_index + 1)
+            elif key == curses.KEY_UP:
+                self.selected_index = max(0, self.selected_index - 1)
             elif key == ord(' '): self.toggle_pause()
             elif key == ord('l'): self.show_lyrics = not self.show_lyrics
-            elif key == ord('n'): self.play_next()
-            elif key == ord('p'): self.play_prev()
-            
-            self.stdscr.refresh()
+            elif key == ord('n'): self.handle_end_of_file() # Re-use logic for next
+            elif key == ord('p'):
+                if self.playback_history:
+                    idx = self.playback_history.pop()
+                    self.play_file(idx, push_history=False)
 
 def main():
     curses.wrapper(lambda s: MusicPlayer(s).run())
