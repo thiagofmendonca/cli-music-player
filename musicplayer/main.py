@@ -17,6 +17,7 @@ import subprocess
 from .utils import slugify, format_time, parse_lrc
 from .search import OnlineSearcher
 from .mpv_setup import get_mpv_path, download_mpv
+from .config import load_config, save_config
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
@@ -24,10 +25,25 @@ AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.o
 class MusicPlayer:
     def __init__(self, stdscr):
         self.stdscr = stdscr
-        self.current_dir = os.getcwd()
+        
+        # Determine start directory
+        # 1. Command line argument
+        # 2. Config 'default_dir'
+        # 3. Current working directory
+        self.config = load_config()
+        start_dir = os.getcwd()
+        
+        if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
+            start_dir = os.path.abspath(sys.argv[1])
+        elif 'default_dir' in self.config and os.path.isdir(self.config['default_dir']):
+            start_dir = self.config['default_dir']
+            
+        self.current_dir = start_dir
         self.files = []
         self.selected_index = 0
         self.scroll_offset = 0
+        self.message = "" # For status messages (e.g. "Default Saved")
+        self.message_time = 0
         
         # Check MPV
         self.mpv_bin = get_mpv_path()
@@ -493,8 +509,16 @@ class MusicPlayer:
             try: self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
             except: pass
         else:
-            help_txt = "[R]ecursive Lib | [/] Search | [B]rowser | [z]Shuffle"
+            help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle"
             try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
+            except: pass
+            
+        # Draw status message if active
+        if time.time() - self.message_time < 2 and self.message:
+            try: 
+                self.stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                self.stdscr.addstr(0, width - len(self.message) - 2, self.message)
+                self.stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
             except: pass
 
     def draw_search_results(self):
@@ -560,6 +584,10 @@ class MusicPlayer:
             if key == ord('q'): 
                 if self.view_mode != 'browser': self.view_mode = 'browser'
                 else: self.running = False
+            elif key == ord('D'):
+                if save_config({'default_dir': self.current_dir}):
+                    self.message = " Default Dir Saved "
+                    self.message_time = time.time()
             elif key == ord('/'): 
                 self.is_searching_input = True
                 self.search_query = []
