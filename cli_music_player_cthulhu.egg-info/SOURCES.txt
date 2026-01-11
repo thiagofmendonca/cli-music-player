@@ -8,6 +8,7 @@ cli_music_player_cthulhu.egg-info/entry_points.txt
 cli_music_player_cthulhu.egg-info/requires.txt
 cli_music_player_cthulhu.egg-info/top_level.txt
 musicplayer/__init__.py
+musicplayer/config.py
 musicplayer/main.py
 musicplayer/mpv_setup.py
 musicplayer/search.py

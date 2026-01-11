@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cli-music-player-cthulhu
-Version: 0.5.5
+Version: 0.6.0
 Summary: A lightweight terminal music player with mpv engine and auto-setup
 Author-email: Thiago Mendonça <tfariamendonca@gmail.com>
 Classifier: Programming Language :: Python :: 3
@@ -10,6 +10,7 @@ Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: yt-dlp>=2023.0.0
+Requires-Dist: windows-curses; sys_platform == "win32"
 Dynamic: license-file
 
 # CLI Music Player
