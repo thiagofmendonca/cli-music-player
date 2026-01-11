@@ -12,6 +12,9 @@ import shutil
 import atexit
 import tempfile
 import random
+import urllib.request
+import urllib.parse
+import re
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
@@ -37,6 +40,12 @@ class MusicPlayer:
         # Animation State
         self.anim_frame = 0
         self.last_anim_time = time.time()
+
+        # Lyrics State
+        self.lyrics = None
+        self.show_lyrics = False
+        self.lyrics_scroll_offset = 0
+        self.current_song_lyrics_fetched = False
         
         # MPV State
         self.mpv_process = None
@@ -101,6 +110,161 @@ class MusicPlayer:
                 os.remove(self.ipc_socket)
             except:
                 pass
+
+    def parse_lrc(self, lrc_text):
+        parsed = []
+        # Regex for [mm:ss.xx]Text
+        pattern = re.compile(r'\[(\d+):(\d+(?:\.\d+)?)\](.*)')
+        for line in lrc_text.splitlines():
+            match = pattern.match(line)
+            if match:
+                minutes = float(match.group(1))
+                seconds = float(match.group(2))
+                text = match.group(3).strip()
+                timestamp = minutes * 60 + seconds
+                parsed.append({'time': timestamp, 'text': text})
+        return parsed
+
+    def fetch_lyrics(self, artist, title, file_path=None):
+        # Debug Logging
+        debug_log = "/tmp/musicplayer_debug.log"
+        with open(debug_log, "a") as f:
+            f.write(f"Fetching: Artist='{artist}', Title='{title}', File='{file_path}'\n")
+
+        self.lyrics = [{'time': None, 'text': "Loading lyrics..."}]
+        found_lyrics = False
+        
+        # 1. Try local .lrc file
+        if file_path:
+            base_path = os.path.splitext(file_path)[0]
+            lrc_path = base_path + ".lrc"
+            if os.path.exists(lrc_path):
+                try:
+                    with open(lrc_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        parsed = self.parse_lrc(content)
+                        if parsed:
+                            self.lyrics = parsed
+                            found_lyrics = True
+                except:
+                    pass
+        
+        if found_lyrics:
+            return
+
+        # Prepare search terms
+        search_terms = []
+        if artist and title:
+            search_terms.append(f"{artist} {title}")
+        
+        # Use filename as fallback or additional search term
+        if file_path:
+            filename = os.path.splitext(os.path.basename(file_path))[0]
+            # Clean filename: replace underscores, remove common garbage like (Official Video), etc.
+            clean_name = filename.replace('_', ' ').replace('-', ' ')
+            clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+            if clean_name not in search_terms:
+                search_terms.append(clean_name)
+        
+        with open(debug_log, "a") as f:
+             f.write(f"Search candidates: {search_terms}\n")
+
+        # 2. Try lrclib.net (Synced)
+        try:
+            # Check for internet connection first
+            try:
+                urllib.request.urlopen('https://www.google.com', timeout=1)
+            except:
+                self.lyrics = [{'time': None, 'text': "Offline mode: Cannot fetch lyrics."}]
+                return
+
+            # A. Try Exact Match (if we have clean Artist/Title)
+            if artist and title:
+                url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(artist)}&track_name={urllib.parse.quote(title)}"
+                try:
+                    req = urllib.request.Request(url)
+                    req.add_header('User-Agent', 'CLI-Music-Player/1.0')
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        data = json.loads(response.read().decode())
+                        if data.get('syncedLyrics'):
+                            parsed = self.parse_lrc(data['syncedLyrics'])
+                            if parsed:
+                                self.lyrics = parsed
+                                found_lyrics = True
+                                with open(debug_log, "a") as f: f.write("Found via Exact Match (Synced)\n")
+                        elif data.get('plainLyrics'):
+                            plain = data['plainLyrics'].strip().split('\n')
+                            self.lyrics = [{'time': None, 'text': line} for line in plain]
+                            found_lyrics = True
+                            with open(debug_log, "a") as f: f.write("Found via Exact Match (Plain)\n")
+                except urllib.error.HTTPError:
+                    pass
+                except Exception as e:
+                     with open(debug_log, "a") as f: f.write(f"Exact match error: {e}\n")
+
+            # B. Search Endpoint (Loop through candidates)
+            if not found_lyrics:
+                for q in search_terms:
+                    if not q: continue
+                    with open(debug_log, "a") as f: f.write(f"Searching query: '{q}'\n")
+                    
+                    try:
+                        url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
+                        req = urllib.request.Request(url)
+                        req.add_header('User-Agent', 'CLI-Music-Player/1.0')
+                        
+                        with urllib.request.urlopen(req, timeout=5) as response:
+                            data = json.loads(response.read().decode())
+                            # Look for first result with synced lyrics
+                            best_match = None
+                            for item in data:
+                                if item.get('syncedLyrics'):
+                                    best_match = item
+                                    break
+                            
+                            # If no synced, take first plain
+                            if not best_match and data:
+                                best_match = data[0]
+                                
+                            if best_match:
+                                if best_match.get('syncedLyrics'):
+                                    parsed = self.parse_lrc(best_match['syncedLyrics'])
+                                    if parsed:
+                                        self.lyrics = parsed
+                                        found_lyrics = True
+                                        with open(debug_log, "a") as f: f.write(f"Found via Search '{q}' (Synced)\n")
+                                elif best_match.get('plainLyrics'):
+                                    plain = best_match['plainLyrics'].strip().split('\n')
+                                    self.lyrics = [{'time': None, 'text': line} for line in plain]
+                                    found_lyrics = True
+                                    with open(debug_log, "a") as f: f.write(f"Found via Search '{q}' (Plain)\n")
+                            
+                            if found_lyrics: break
+                    except Exception as e:
+                        with open(debug_log, "a") as f: f.write(f"Search error for '{q}': {e}\n")
+
+        except Exception as e:
+            with open(debug_log, "a") as f: f.write(f"Global fetch error: {e}\n")
+
+        if not found_lyrics:
+            # 3. Fallback to lyrics.ovh (Plain only)
+            if artist and title:
+                try:
+                    url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist)}/{urllib.parse.quote(title)}"
+                    req = urllib.request.Request(url)
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        data = json.loads(response.read().decode())
+                        raw = data.get('lyrics', '')
+                        if raw:
+                            self.lyrics = [{'time': None, 'text': line} for line in raw.replace('\r\n', '\n').split('\n')]
+                            found_lyrics = True
+                            with open(debug_log, "a") as f: f.write("Found via lyrics.ovh\n")
+                except:
+                    pass
+            
+        if not found_lyrics:
+            self.lyrics = [{'time': None, 'text': "Lyrics not found."}]
+            with open(debug_log, "a") as f: f.write("Gave up.\n")
 
     def scan_directory(self):
         """Standard Browser Mode: List current dir"""
@@ -213,6 +377,19 @@ class MusicPlayer:
                 meta = self.get_property("metadata")
                 if meta:
                     self.metadata = meta
+                    
+                    # Trigger lyrics fetch if we have enough info and haven't tried yet
+                    if self.show_lyrics and not self.current_song_lyrics_fetched:
+                        artist = self.metadata.get('artist')
+                        title = self.metadata.get('title')
+                        # Also get current filename
+                        file_path = None
+                        if self.playing_index != -1 and self.playing_index < len(self.files):
+                             file_path = os.path.join(self.current_dir, self.files[self.playing_index]['path'])
+                             
+                        if (artist and title) or file_path:
+                            self.current_song_lyrics_fetched = True
+                            threading.Thread(target=self.fetch_lyrics, args=(artist or "", title or "", file_path), daemon=True).start()
                 
                 # Poll pause state
                 paused = self.get_property("pause")
@@ -309,6 +486,9 @@ class MusicPlayer:
             # Path handling: join current_dir with the relative path stored in item
             file_path = os.path.join(self.current_dir, self.files[index]['path'])
             self.metadata = {} # Reset metadata
+            self.lyrics = None
+            self.lyrics_scroll_offset = 0
+            self.current_song_lyrics_fetched = False
             
             try:
                 # Start MPV with IPC
@@ -441,45 +621,103 @@ class MusicPlayer:
                            curses.color_pair(3) if self.paused else curses.color_pair(2))
         except: pass
 
-        # 4. PULSING CTHULHU (ASCII ART)
-        # Update animation frame
-        if time.time() - self.last_anim_time > 0.4: # 400ms pulse
-            self.anim_frame = (self.anim_frame + 1) % 2
-            self.last_anim_time = time.time()
-        
-        cthulhu_frames = [
-            [
-                " ( o . o ) ",
-                " (  |||  ) ",
-                "/||\/||\/|\\"
-            ],
-            [
-                " ( O . O ) ",
-                " ( /|||\ ) ",
-                "//||\/||\/\\\\"
+        # 4. PULSING CTHULHU (ASCII ART) or LYRICS
+        if self.show_lyrics:
+            # Display Lyrics
+            lyrics_height = 10
+            start_y = center_y - 2
+            
+            if self.lyrics:
+                # Check if synced
+                is_synced = any(l['time'] is not None for l in self.lyrics)
+                
+                current_line_idx = 0
+                
+                if is_synced:
+                    # Find current line based on position
+                    # We want the last line where time <= self.position
+                    found_idx = -1
+                    for i, line in enumerate(self.lyrics):
+                         if line['time'] is not None and line['time'] <= self.position:
+                             found_idx = i
+                         else:
+                             break
+                    
+                    if found_idx != -1:
+                        current_line_idx = found_idx
+                    
+                    # Auto-scroll to keep current line in middle
+                    # Target: current_line_idx should be at lyrics_height // 2
+                    target_offset = current_line_idx - (lyrics_height // 2)
+                    self.lyrics_scroll_offset = max(0, min(len(self.lyrics) - 1, target_offset))
+                
+                for i in range(lyrics_height):
+                    line_idx = self.lyrics_scroll_offset + i
+                    if 0 <= line_idx < len(self.lyrics):
+                        line_data = self.lyrics[line_idx]
+                        line_text = line_data['text'].strip()
+                        
+                        style = curses.color_pair(6)
+                        if is_synced and line_idx == current_line_idx:
+                            style = curses.color_pair(2) | curses.A_BOLD # Highlight current line
+                            line_text = ">> " + line_text
+                        
+                        try:
+                            self.stdscr.addstr(start_y + i, max(0, (width - len(line_text)) // 2), line_text[:width], style)
+                        except: pass
+                
+                # Scroll bar/indicator if needed
+                if len(self.lyrics) > lyrics_height:
+                    scroll_pct = self.lyrics_scroll_offset / (len(self.lyrics) - lyrics_height)
+                    try:
+                        self.stdscr.addstr(start_y + int(lyrics_height * scroll_pct), width - 2, "|", curses.A_DIM)
+                    except: pass
+
+            else:
+                 msg = "Fetching lyrics..." if self.current_song_lyrics_fetched else "Lyrics (Waiting for Metadata...)"
+                 try:
+                     self.stdscr.addstr(center_y, (width - len(msg)) // 2, msg, curses.A_DIM)
+                 except: pass
+
+        else:
+            # Update animation frame
+            if time.time() - self.last_anim_time > 0.4: # 400ms pulse
+                self.anim_frame = (self.anim_frame + 1) % 2
+                self.last_anim_time = time.time()
+            
+            cthulhu_frames = [
+                [
+                    " ( o . o ) ",
+                    " (  |||  ) ",
+                    "/||\/||\/|\\"
+                ],
+                [
+                    " ( O . O ) ",
+                    " ( /|||\ ) ",
+                    "//||\/||\/\\\\"
+                ]
             ]
-        ]
-        
-        if not self.paused and self.playing_index != -1:
-            art = cthulhu_frames[self.anim_frame]
-            # Draw Art (3 lines) starting at center_y
-            for i, line in enumerate(art):
-                try:
-                    self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
-                                       curses.color_pair(7) | curses.A_BOLD)
-                except: pass
-        elif self.paused:
-             # Sleeping Cthulhu
-             art = [
-                " ( - . - ) ",
-                " (  zzz  ) ",
-                "  |||||||  "
-             ]
-             for i, line in enumerate(art):
-                try:
-                    self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
-                                       curses.color_pair(7) | curses.A_DIM)
-                except: pass
+            
+            if not self.paused and self.playing_index != -1:
+                art = cthulhu_frames[self.anim_frame]
+                # Draw Art (3 lines) starting at center_y
+                for i, line in enumerate(art):
+                    try:
+                        self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
+                                           curses.color_pair(7) | curses.A_BOLD)
+                    except: pass
+            elif self.paused:
+                 # Sleeping Cthulhu
+                 art = [
+                    " ( - . - ) ",
+                    " (  zzz  ) ",
+                    "  |||||||  "
+                 ]
+                 for i, line in enumerate(art):
+                    try:
+                        self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, 
+                                           curses.color_pair(7) | curses.A_DIM)
+                    except: pass
 
 
         # 5. Progress Bar
@@ -499,7 +737,7 @@ class MusicPlayer:
              except: pass
 
         # Controls Hint
-        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [q] Browser"
+        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [q] Browser"
         try:
             self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
@@ -598,6 +836,15 @@ class MusicPlayer:
                     self.play_prev()
                 elif key == ord('z'):
                     self.shuffle = not self.shuffle
+                elif key == ord('l'):
+                    self.show_lyrics = not self.show_lyrics
+                    if self.show_lyrics and not self.current_song_lyrics_fetched and self.playing_index != -1:
+                        artist = self.metadata.get('artist')
+                        title = self.metadata.get('title')
+                        file_path = os.path.join(self.current_dir, self.files[self.playing_index]['path'])
+                        if (artist and title) or file_path:
+                            self.current_song_lyrics_fetched = True
+                            threading.Thread(target=self.fetch_lyrics, args=(artist or "", title or "", file_path), daemon=True).start()
                 elif key == ord('R'):
                     self.scan_recursive()
                 elif key == ord('B'):
@@ -640,6 +887,12 @@ class MusicPlayer:
                                         self.scan_directory()
                             else:
                                 self.play_file(self.selected_index)
+                elif self.view_mode == 'player':
+                    if key == curses.KEY_UP and self.show_lyrics:
+                         self.lyrics_scroll_offset = max(0, self.lyrics_scroll_offset - 1)
+                    elif key == curses.KEY_DOWN and self.show_lyrics:
+                         if self.lyrics:
+                             self.lyrics_scroll_offset = min(len(self.lyrics) - 1, self.lyrics_scroll_offset + 1)
 
             self.stdscr.refresh()
 
