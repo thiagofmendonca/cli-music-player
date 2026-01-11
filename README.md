@@ -1,63 +1,48 @@
-# CLI Music Player
+# CLI Music Player (Cthulhu Edition)
 
-A lightweight, terminal-based music player written in Python, featuring a pulsing Cthulhu and online lyrics support.
+A powerful, lightweight terminal-based music player written in Python. It combines a robust local file browser with online streaming capabilities (YouTube, SoundCloud) and a unique visual style featuring a pulsing Cthulhu and synced lyrics.
 
 ![Demo](demo.gif)
 
 ## Features
 
-- **Terminal User Interface (TUI):** Clean interface built with `curses`.
-- **Online & Synced Lyrics:** Automatic lyrics fetching from `LRCLIB`, `Letras.mus.br`, and `Lyrics.ovh`.
-- **File Browser:** Navigate directories to find your music.
-- **Recursive Library Mode:** Scan all subdirectories and play your entire collection at once.
-- **Shuffle Mode:** Randomized playback with a history-aware "Previous" function.
-- **Audio Formats:** Supports mp3, wav, flac, ogg, m4a, wma, aac, opus.
-- **Playback Controls:**
-  - Play / Pause / Stop
-  - Next / Previous Track
-  - Volume Control
-  - Progress Bar with Synced Lyrics highlighting.
-- **Now Playing View:** Dedicated screen showing track info, progress, and Cthulhu/Lyrics.
-
-## Requirements
-
-- Python 3.8+
-- Audio output device.
+- **Hybrid Playback:**
+  - **Local:** Plays MP3, FLAC, OGG, WAV, M4A, and more.
+  - **Online:** Search and stream directly from **YouTube** and **SoundCloud**.
+- **Robust Engine:** Uses `mpv` as the core backend for best-in-class format support and stability.
+- **Visuals:**
+  - Pulsing Cthulhu animation.
+  - **Synced Lyrics:** Automatic fetching from LRCLib with fallback to Letras.mus.br and Lyrics.ovh.
+- **Smart Interface:**
+  - **Recursive Library:** Scan entire folder trees.
+  - **Search Mode:** Press `/` to find online tracks instantly.
+  - **Persistence:** Save your default music directory.
+- **Cross-Platform:**
+  - **Linux:** Works with system `mpv`.
+  - **Windows:** Automatically downloads a portable `mpv` if missing.
 
 ## Installation
 
 ### Via PIP (Recommended)
 
-Install directly from PyPI:
-
 ```bash
 pip install cli-music-player-cthulhu
 ```
 
-### From Source
+### Requirements
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/thiagofmendonca/cli-music-player.git
-   cd cli-music-player
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install pygame mutagen
-   ```
-
-3. Run the script:
-   ```bash
-   python musicplayer.py
-   ```
+- **Python 3.8+**
+- **Linux:** You must install `mpv` (e.g., `sudo pacman -S mpv` or `sudo apt install mpv`).
+- **Windows:** No extra steps! The player downloads a standalone `mpv` on first run if needed.
 
 ## Usage
 
-Run the command from your terminal:
+Run the player:
 
 ```bash
 musicplayer
+# OR open a specific folder:
+musicplayer /path/to/music
 ```
 
 ### Controls
@@ -65,18 +50,25 @@ musicplayer
 | Key | Action |
 | :--- | :--- |
 | **Arrow Up/Down** | Navigate files / Scroll Lyrics |
-| **Enter** | Play file / Open directory |
+| **Enter** | Play file / Open directory / Select Search Result |
 | **Space** | Play / Pause |
-| **l** | Toggle Lyrics View |
+| **/** | **Search Online** (YouTube default, use `sc:` for SoundCloud) |
+| **l** | Toggle Lyrics / Cthulhu View |
+| **D** (Shift+d) | **Set current directory as Default** (Persistent) |
 | **n** | Next Track |
 | **p** | Previous Track (History-aware) |
 | **z** | Toggle Shuffle Mode |
-| **R** | Load Recursive Library (all subfolders) |
-| **B** | Return to Browser Mode |
+| **R** (Shift+r) | Load Recursive Library (all subfolders) |
+| **B** (Shift+b) | Return to Browser Mode |
 | **+ / -** | Volume Up / Down |
 | **Tab** | Toggle "Now Playing" View |
 | **s** | Stop |
-| **q** | Quit (or go back from Player View) |
+| **q** | Quit (or go back) |
+
+## Advanced Search
+
+- **YouTube:** Just type your query (e.g., `Coldplay Yellow`).
+- **SoundCloud:** Prefix with `sc:` (e.g., `sc:Synthwave mix`).
 
 ## License
 
