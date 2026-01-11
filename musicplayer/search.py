@@ -30,6 +30,7 @@ class OnlineSearcher:
                             'artist': entry.get('uploader', 'Unknown'),
                             'duration': entry.get('duration', 0),
                             'id': entry.get('id'),
+                            'url': entry.get('url'), # Capture the full URL
                             'source': source,
                             'type': 'stream' # To distinguish from 'file'
                         })

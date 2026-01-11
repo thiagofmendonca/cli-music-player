@@ -573,7 +573,9 @@ class MusicPlayer:
                 ]
                 
                 downloaded_path = None
-                last_error = None
+                
+                # Target: URL is preferred for generic extractors (soundcloud), ID works for youtube
+                target = result.get('url') or result['id']
                 
                 for clients in clients_to_try:
                     try:
@@ -589,7 +591,7 @@ class MusicPlayer:
                         }
                         
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(result['id'], download=True)
+                            info = ydl.extract_info(target, download=True)
                             if not info: raise Exception("No info extracted")
                             ext = info.get('ext', 'mp3')
                             path = cache_base + "." + ext
