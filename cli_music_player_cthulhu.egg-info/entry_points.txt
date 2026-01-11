@@ -1,2 +1,2 @@
 [console_scripts]
-musicplayer = musicplayer:main
+musicplayer = musicplayer.main:main
