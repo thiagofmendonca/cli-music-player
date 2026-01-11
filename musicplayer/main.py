@@ -518,7 +518,7 @@ class MusicPlayer:
                  self.stdscr.addstr(center_y + 9, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
              except: pass
 
-        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [q] Browser"
+        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Browser"
         try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
 
@@ -551,7 +551,12 @@ class MusicPlayer:
             try:
                 # Use yt-dlp to get the actual stream URL
                 import yt_dlp
-                ydl_opts = {'format': 'bestaudio/best', 'quiet': True}
+                # Use android client to avoid JS engine requirement
+                ydl_opts = {
+                    'format': 'bestaudio/best', 
+                    'quiet': True,
+                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(result['id'], download=False)
                     url = info['url']
@@ -674,7 +679,7 @@ class MusicPlayer:
             try: self.stdscr.addstr(height-1, 0, status[:width], curses.color_pair(2))
             except: pass
         else:
-            help_txt = "[R]ecursive Lib | [B]rowser | [z]Shuffle"
+            help_txt = "[R]ecursive Lib | [/] Search | [B]rowser | [z]Shuffle"
             try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
             except: pass
 
