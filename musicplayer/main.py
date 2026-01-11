@@ -57,6 +57,10 @@ class MusicPlayer:
         self.search_query = []
         self.is_searching_input = False
         
+        # Animation State (Missing in v0.5.0, restoring for rich UI)
+        self.anim_frame = 0
+        self.last_anim_time = time.time()
+        
         # MPV State
         self.mpv_process = None
         self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
@@ -315,139 +319,151 @@ class MusicPlayer:
         self.send_ipc_command(["set_property", "volume", self.volume])
 
     # ... UI Drawing Methods (Identical to previous, just simplified for this context) ...
-    def draw_player_view(self):
-        height, width = self.stdscr.getmaxyx()
-        
-        # Check if terminal is too small
-        if height < 15 or width < 40:
-            try: self.stdscr.addstr(0, 0, "Terminal too small")
-            except: pass
-            return
-
-        title = self.metadata.get('title', "Unknown")
-        artist = self.metadata.get('artist', "Unknown")
-        prev_name = ""
-        next_name = ""
-        
-        if self.playing_index != -1:
-            # Logic for prev/next names
-            if self.playback_history:
-                 p_idx = self.playback_history[-1]
-                 if 0 <= p_idx < len(self.files): prev_name = f"Prev: {self.files[p_idx]['name']}"
-            else:
-                p_idx = self.playing_index - 1
-                if 0 <= p_idx < len(self.files) and self.files[p_idx]['type'] == 'file': prev_name = f"Prev: {self.files[p_idx]['name']}"
+        def draw_player_view(self):
+            height, width = self.stdscr.getmaxyx()
             
-            if self.shuffle: next_name = "Next: Random"
-            else:
-                n_idx = self.get_next_index(self.playing_index)
-                if n_idx is not None: next_name = f"Next: {self.files[n_idx]['name']}"
+            # Check if terminal is too small
+            if height < 15 or width < 40:
+                try: self.stdscr.addstr(0, 0, "Terminal too small")
+                except: pass
+                return
+    
+            title = self.metadata.get('title', "Unknown")
+            artist = self.metadata.get('artist', "Unknown")
+            prev_name = ""
+            next_name = ""
             
-        center_y = height // 2
-        
-        # 1. Prev Track
-        if prev_name and center_y - 8 > 0:
+            if self.playing_index != -1:
+                # Logic for prev/next names
+                if self.playback_history:
+                     p_idx = self.playback_history[-1]
+                     if 0 <= p_idx < len(self.files): prev_name = f"Prev: {self.files[p_idx]['name']}"
+                else:
+                    p_idx = self.playing_index - 1
+                    if 0 <= p_idx < len(self.files) and self.files[p_idx]['type'] == 'file': prev_name = f"Prev: {self.files[p_idx]['name']}"
+                
+                if self.shuffle: next_name = "Next: Random"
+                else:
+                    n_idx = self.get_next_index(self.playing_index)
+                    if n_idx is not None: next_name = f"Next: {self.files[n_idx]['name']}"
+                
+            center_y = height // 2
+            
+            # 1. Prev Track
+            if prev_name and center_y - 8 > 0:
+                try:
+                    self.stdscr.addstr(center_y - 8, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
+                    self.stdscr.addstr(center_y - 7, (width - 1) // 2, "^", curses.A_DIM)
+                except: pass
+    
+            # 2. Current Track
             try:
-                self.stdscr.addstr(center_y - 8, (width - len(prev_name)) // 2, prev_name[:width], curses.A_DIM)
-                self.stdscr.addstr(center_y - 7, (width - 1) // 2, "^", curses.A_DIM)
+                self.stdscr.attron(curses.A_BOLD)
+                self.stdscr.addstr(center_y - 5, max(0, (width - len(title)) // 2), title[:width])
+                self.stdscr.attroff(curses.A_BOLD)
+                self.stdscr.addstr(center_y - 4, max(0, (width - len(artist)) // 2), artist[:width])
             except: pass
-
-        # 2. Current Track
-        try:
-            self.stdscr.attron(curses.A_BOLD)
-            self.stdscr.addstr(center_y - 5, max(0, (width - len(title)) // 2), title[:width])
-            self.stdscr.attroff(curses.A_BOLD)
-            self.stdscr.addstr(center_y - 4, max(0, (width - len(artist)) // 2), artist[:width])
-        except: pass
-        
-        # 3. Status
-        mode_str = " [Shuffle]" if self.shuffle else ""
-        if self.library_mode: mode_str += " [Lib]"
-        status = ("PAUSED" if self.paused else "PLAYING") + mode_str
-        try:
-            self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status, 
-                           curses.color_pair(3) if self.paused else curses.color_pair(2))
-        except: pass
-
-        # 4. Cthulhu or Lyrics
-        if self.show_lyrics:
-            lyrics_height = 10
-            start_y = center_y - 2
-            if self.lyrics:
-                is_synced = any(l['time'] is not None for l in self.lyrics)
-                current_line_idx = 0
-                if is_synced:
-                    # Find current line based on position
-                    found_idx = -1
-                    for i, line in enumerate(self.lyrics):
-                         if line['time'] is not None and line['time'] <= self.position: found_idx = i
-                         else: break
-                    if found_idx != -1: current_line_idx = found_idx
-                    # Auto-scroll
-                    target_offset = current_line_idx - (lyrics_height // 2)
-                    self.lyrics_scroll_offset = max(0, min(len(self.lyrics) - 1, target_offset))
-                
-                for i in range(lyrics_height):
-                    line_idx = self.lyrics_scroll_offset + i
-                    if 0 <= line_idx < len(self.lyrics):
-                        line_data = self.lyrics[line_idx]
-                        line_text = line_data['text'].strip()
-                        style = curses.color_pair(6)
-                        if is_synced and line_idx == current_line_idx:
-                            style = curses.color_pair(2) | curses.A_BOLD
-                            line_text = ">> " + line_text
-                        try: self.stdscr.addstr(start_y + i, max(0, (width - len(line_text)) // 2), line_text[:width], style)
+            
+            # 3. Status
+            mode_str = " [Shuffle]" if self.shuffle else ""
+            if self.library_mode: mode_str += " [Lib]"
+            status = ("PAUSED" if self.paused else "PLAYING") + mode_str
+            try:
+                self.stdscr.addstr(center_y - 2, (width - len(status)) // 2, status, 
+                               curses.color_pair(3) if self.paused else curses.color_pair(2))
+            except: pass
+    
+            # 4. Cthulhu or Lyrics
+            if self.show_lyrics:
+                lyrics_height = 10
+                start_y = center_y - 2
+                if self.lyrics:
+                    is_synced = any(l['time'] is not None for l in self.lyrics)
+                    current_line_idx = 0
+                    if is_synced:
+                        # Find current line based on position
+                        found_idx = -1
+                        for i, line in enumerate(self.lyrics):
+                             if line['time'] is not None and line['time'] <= self.position: found_idx = i
+                             else: break
+                        if found_idx != -1: current_line_idx = found_idx
+                        # Auto-scroll
+                        target_offset = current_line_idx - (lyrics_height // 2)
+                        self.lyrics_scroll_offset = max(0, min(len(self.lyrics) - 1, target_offset))
+                    
+                    for i in range(lyrics_height):
+                        line_idx = self.lyrics_scroll_offset + i
+                        if 0 <= line_idx < len(self.lyrics):
+                            line_data = self.lyrics[line_idx]
+                            line_text = line_data['text'].strip()
+                            style = curses.color_pair(6)
+                            if is_synced and line_idx == current_line_idx:
+                                style = curses.color_pair(2) | curses.A_BOLD
+                                line_text = ">> " + line_text
+                            try: self.stdscr.addstr(start_y + i, max(0, (width - len(line_text)) // 2), line_text[:width], style)
+                            except: pass
+                    
+                    if len(self.lyrics) > lyrics_height:
+                        scroll_pct = self.lyrics_scroll_offset / (len(self.lyrics) - lyrics_height)
+                        try: self.stdscr.addstr(start_y + int(lyrics_height * scroll_pct), width - 2, "|", curses.A_DIM)
                         except: pass
+                else:
+                     msg = "Fetching lyrics..." if self.current_song_lyrics_fetched else "Lyrics (Waiting for Metadata...)"
+                     try: self.stdscr.addstr(center_y, (width - len(msg)) // 2, msg, curses.A_DIM)
+                     except: pass
+            else:
+                # Animation
+                if time.time() - self.last_anim_time > 0.4:
+                    self.anim_frame = (self.anim_frame + 1) % 2
+                    self.last_anim_time = time.time()
                 
-                if len(self.lyrics) > lyrics_height:
-                    scroll_pct = self.lyrics_scroll_offset / (len(self.lyrics) - lyrics_height)
-                    try: self.stdscr.addstr(start_y + int(lyrics_height * scroll_pct), width - 2, "|", curses.A_DIM)
-                    except: pass
-            else:
-                 msg = "Fetching lyrics..." if self.current_song_lyrics_fetched else "Lyrics (Waiting for Metadata...)"
-                 try: self.stdscr.addstr(center_y, (width - len(msg)) // 2, msg, curses.A_DIM)
+                cthulhu_frames = [
+                    [
+                        " ( o . o ) ",
+                        " (  |||  ) ",
+                        "/||\/||\/|\\"
+                    ],
+                    [
+                        " ( O . O ) ",
+                        " ( /|||\ ) ",
+                        "//||\/||\/\\\\"
+                    ]
+                ]
+                
+                if not self.paused: # and playing logic implicit
+                    art = cthulhu_frames[self.anim_frame]
+                    for i, line in enumerate(art):
+                        try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_BOLD)
+                        except: pass
+                else:
+                     art = [
+                        " ( - . - ) ",
+                        " (  zzz  ) ",
+                        "  |||||||  "
+                     ]
+                     for i, line in enumerate(art):
+                        try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_DIM)
+                        except: pass
+    
+            # 5. Progress Bar
+            self.draw_progress_bar(center_y + 4, width - 4)
+            
+            # 6. Volume
+            vol_str = f"Volume: {int(self.volume)}%"
+            try: self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
+            except: pass
+    
+            # 7. Next Track
+            if next_name and center_y + 9 < height - 1:
+                 try:
+                     self.stdscr.addstr(center_y + 8, (width - 1) // 2, "v", curses.A_DIM)
+                     self.stdscr.addstr(center_y + 9, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
                  except: pass
-        else:
-            # Animation
-            if time.time() - self.last_anim_time > 0.4:
-                self.anim_frame = (self.anim_frame + 1) % 2
-                self.last_anim_time = time.time()
-            
-            cthulhu_frames = [
-                [" ( o . o ) ", " (  |||  ) ", "/||\/||\/|\\"],
-                [" ( O . O ) ", " ( /|||\ ) ", "//||\/||\/\\\\"]
-            ]
-            
-            if not self.paused: # and playing logic implicit
-                art = cthulhu_frames[self.anim_frame]
-                for i, line in enumerate(art):
-                    try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_BOLD)
-                    except: pass
-            else:
-                 art = [" ( - . - ) ", " (  zzz  ) ", "  |||||||  "]
-                 for i, line in enumerate(art):
-                    try: self.stdscr.addstr(center_y + i, (width - len(line)) // 2, line, curses.color_pair(7) | curses.A_DIM)
-                    except: pass
-
-        # 5. Progress Bar
-        self.draw_progress_bar(center_y + 4, width - 4)
-        
-        # 6. Volume
-        vol_str = f"Volume: {int(self.volume)}%"
-        try: self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
-        except: pass
-
-        # 7. Next Track
-        if next_name and center_y + 9 < height - 1:
-             try:
-                 self.stdscr.addstr(center_y + 8, (width - 1) // 2, "v", curses.A_DIM)
-                 self.stdscr.addstr(center_y + 9, (width - len(next_name)) // 2, next_name[:width], curses.A_DIM)
-             except: pass
-
-        # Hint
-        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Browser"
-        try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
-        except: pass
+    
+            # Hint
+            hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Browser"
+            try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
+            except: pass
 
     def draw_progress_bar(self, y, width):
         if self.duration <= 0: pct = 0
