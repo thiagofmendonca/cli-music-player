@@ -574,6 +574,8 @@ class MusicPlayer:
                      self.queue.append(item)
                  self.message = f" Added {len(self.search_results)} items to queue "
                  self.message_time = time.time()
+                 if not self.mpv_process:
+                     self.handle_end_of_file()
         elif key == ord(' '): self.toggle_pause()
         elif key == ord('l'): self.show_lyrics = not self.show_lyrics
         elif key == ord('n'): self.handle_end_of_file()

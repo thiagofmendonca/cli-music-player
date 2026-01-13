@@ -50,12 +50,33 @@ class TestQueueFeatures(unittest.TestCase):
             {'title': 'T2', 'artist': 'A2', 'id': '2', 'type': 'stream'}
         ]
         
-        # Simulate 'A' (shift+a)
-        self.player.process_key(ord('A'))
-        
+        # Mock handle_end_of_file to prevent auto-play from consuming queue
+        with patch.object(self.player, 'handle_end_of_file'):
+            # Simulate 'A' (shift+a)
+            self.player.process_key(ord('A'))
+            
         self.assertEqual(len(self.player.queue), 2)
         self.assertEqual(self.player.queue[0]['title'], 'T1')
         self.assertEqual(self.player.queue[1]['title'], 'T2')
+
+    def test_add_all_starts_playback_if_idle(self):
+        self.player.view_mode = 'search_results'
+        self.player.search_results = [{'title': 'T1', 'artist': 'A1', 'id': '1', 'type': 'stream'}]
+        self.player.mpv_process = None # Idle
+        
+        # Mock handle_end_of_file to verify call
+        with patch.object(self.player, 'handle_end_of_file') as mock_handle:
+            self.player.process_key(ord('A'))
+            mock_handle.assert_called_once()
+
+    def test_add_all_does_not_interrupt_playback(self):
+        self.player.view_mode = 'search_results'
+        self.player.search_results = [{'title': 'T1', 'artist': 'A1', 'id': '1', 'type': 'stream'}]
+        self.player.mpv_process = MagicMock() # Playing
+        
+        with patch.object(self.player, 'handle_end_of_file') as mock_handle:
+            self.player.process_key(ord('A'))
+            mock_handle.assert_not_called()
 
     def test_queue_display_logic(self):
         # Setup queue
