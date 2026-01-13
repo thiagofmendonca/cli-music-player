@@ -443,6 +443,23 @@ class MusicPlayer:
         try: self.stdscr.addstr(center_y + 6, (width - len(vol_str)) // 2, vol_str)
         except: pass
 
+        # 4. Queue Preview
+        queue_y = center_y + 8
+        remaining_lines = height - 2 - queue_y
+        # Debugging: write to file
+        # with open('debug_view.log', 'a') as f: f.write(f"H:{height} QY:{queue_y} Rem:{remaining_lines} QLen:{len(self.queue)}\n")
+        if remaining_lines >= 3 and self.queue:
+             try:
+                 self.stdscr.addstr(queue_y, (width - 10) // 2, "--- Queue ---", curses.A_DIM)
+                 count = min(remaining_lines - 1, 5, len(self.queue))
+                 for i in range(count):
+                     item = self.queue[i]
+                     name = item.get('title', item.get('name', 'Unknown'))
+                     display = f"{i+1}. {name}"
+                     self.stdscr.addstr(queue_y + 1 + i, max(0, (width - len(display)) // 2), display[:width], curses.color_pair(6))
+             except Exception as e:
+                 with open("error_log.txt", "a") as f: f.write(str(e) + "\n")
+
         hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Back"
         try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
@@ -492,7 +509,7 @@ class MusicPlayer:
             try: self.stdscr.addstr(i+1, 0, f"  {name}"[:width], style)
             except: pass
         
-        hint = "[Enter] Play | [a] Add to Queue | [q] Back"
+        hint = "[Enter] Play | [a] Add One | [A] Add All | [q] Back"
         try: self.stdscr.addstr(height-1, 0, hint[:width], curses.color_pair(6))
         except: pass
 
@@ -551,6 +568,12 @@ class MusicPlayer:
                     self.queue.append(item)
                     self.message = f" Added to queue: {f['name'][:20]}... "
                     self.message_time = time.time()
+        elif key == ord('A'):
+             if self.view_mode == 'search_results' and self.search_results:
+                 for item in self.search_results:
+                     self.queue.append(item)
+                 self.message = f" Added {len(self.search_results)} items to queue "
+                 self.message_time = time.time()
         elif key == ord(' '): self.toggle_pause()
         elif key == ord('l'): self.show_lyrics = not self.show_lyrics
         elif key == ord('n'): self.handle_end_of_file()
