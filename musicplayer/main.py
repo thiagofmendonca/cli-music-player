@@ -68,6 +68,7 @@ class MusicPlayer:
         self.search_results = []
         self.search_query = []
         self.is_searching_input = False
+        self.queue = []
         
         # MPV State
         self.mpv_process = None
@@ -307,6 +308,25 @@ class MusicPlayer:
         if self.show_lyrics:
             threading.Thread(target=self.fetch_lyrics, args=(result['artist'], result['title']), daemon=True).start()
 
+    def play_queue_item(self, item):
+        self.cleanup()
+        self.playing_index = -1
+        self.metadata = {'title': item.get('title', item.get('name', 'Unknown')), 
+                         'artist': item.get('artist', 'Unknown')}
+        self.current_song_lyrics_fetched = False
+        
+        target = ""
+        if item['type'] == 'file':
+            target = item['path']
+        else:
+            target = item.get('url') or item['id']
+            if len(target) == 11 and '.' not in target:
+                 target = f"https://www.youtube.com/watch?v={target}"
+                 
+        self._start_mpv(target)
+        if self.show_lyrics and item['type'] != 'file':
+            threading.Thread(target=self.fetch_lyrics, args=(self.metadata['artist'], self.metadata['title']), daemon=True).start()
+
     def _start_mpv(self, target):
         self.paused = False
         self.view_mode = 'player'
@@ -331,10 +351,17 @@ class MusicPlayer:
         self.view_mode = 'browser'
 
     def handle_end_of_file(self):
+        if self.queue:
+            item = self.queue.pop(0)
+            self.play_queue_item(item)
+            return
+
         if self.playing_index != -1:
              next_idx = self.get_next_index(self.playing_index)
              if next_idx is not None: self.play_file(next_idx)
              else: self.stop_music()
+        else:
+             self.stop_music()
 
     def toggle_pause(self):
         self.send_ipc_command(["cycle", "pause"])
@@ -443,7 +470,7 @@ class MusicPlayer:
             style = curses.color_pair(1) if file_idx == self.selected_index else curses.A_NORMAL
             try: self.stdscr.addstr(i + 1, 0, f"  {self.files[file_idx]['name']}"[:width], style)
             except: pass
-        help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle"
+        help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle | [a] Queue"
         try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
         except: pass
         if time.time() - self.message_time < 2 and self.message:
@@ -464,6 +491,10 @@ class MusicPlayer:
             name = f"{self.search_results[idx]['title']} - {self.search_results[idx]['artist']}"
             try: self.stdscr.addstr(i+1, 0, f"  {name}"[:width], style)
             except: pass
+        
+        hint = "[Enter] Play | [a] Add to Queue | [q] Back"
+        try: self.stdscr.addstr(height-1, 0, hint[:width], curses.color_pair(6))
+        except: pass
 
     def handle_input(self, key):
         if key == 10:
@@ -481,6 +512,53 @@ class MusicPlayer:
             if self.search_query: self.search_query.pop()
         elif 32 <= key <= 126: self.search_query.append(chr(key))
 
+    def process_key(self, key):
+        if key == ord('q'): 
+            if self.view_mode != 'browser': self.view_mode = 'browser'
+            else: self.running = False
+        elif key == ord('D'):
+            if save_config({'default_dir': self.current_dir}):
+                self.message = " Default Dir Saved "
+                self.message_time = time.time()
+        elif key == ord('/'): 
+            self.is_searching_input = True
+            self.search_query = []
+        elif key == 10:
+            if self.view_mode == 'browser':
+                f = self.files[self.selected_index]
+                if f['type'] == 'dir':
+                    self.current_dir = os.path.abspath(os.path.join(self.current_dir, f['path']))
+                    self.scan_directory()
+                else: self.play_file(self.selected_index)
+            elif self.view_mode == 'search_results':
+                if self.search_results: self.play_stream(self.search_results[self.selected_index])
+        elif key == curses.KEY_DOWN:
+            limit = len(self.files) if self.view_mode == 'browser' else len(self.search_results)
+            self.selected_index = min(limit - 1, self.selected_index + 1)
+        elif key == curses.KEY_UP:
+            self.selected_index = max(0, self.selected_index - 1)
+        elif key == ord('a'):
+            if self.view_mode == 'search_results' and self.search_results:
+                item = self.search_results[self.selected_index]
+                self.queue.append(item)
+                self.message = f" Added to queue: {item['title'][:20]}... "
+                self.message_time = time.time()
+            elif self.view_mode == 'browser' and self.files:
+                f = self.files[self.selected_index]
+                if f['type'] == 'file':
+                    abs_path = os.path.abspath(os.path.join(self.current_dir, f['path']))
+                    item = {'type': 'file', 'path': abs_path, 'name': f['name'], 'artist': 'Local File'}
+                    self.queue.append(item)
+                    self.message = f" Added to queue: {f['name'][:20]}... "
+                    self.message_time = time.time()
+        elif key == ord(' '): self.toggle_pause()
+        elif key == ord('l'): self.show_lyrics = not self.show_lyrics
+        elif key == ord('n'): self.handle_end_of_file()
+        elif key == ord('p'):
+            if self.playback_history:
+                idx = self.playback_history.pop()
+                self.play_file(idx, push_history=False)
+
     def run(self):
         while self.running:
             self.stdscr.clear()
@@ -497,37 +575,7 @@ class MusicPlayer:
             if self.is_searching_input:
                 self.handle_input(key)
                 continue
-            if key == ord('q'): 
-                if self.view_mode != 'browser': self.view_mode = 'browser'
-                else: self.running = False
-            elif key == ord('D'):
-                if save_config({'default_dir': self.current_dir}):
-                    self.message = " Default Dir Saved "
-                    self.message_time = time.time()
-            elif key == ord('/'): 
-                self.is_searching_input = True
-                self.search_query = []
-            elif key == 10:
-                if self.view_mode == 'browser':
-                    f = self.files[self.selected_index]
-                    if f['type'] == 'dir':
-                        self.current_dir = os.path.abspath(os.path.join(self.current_dir, f['path']))
-                        self.scan_directory()
-                    else: self.play_file(self.selected_index)
-                elif self.view_mode == 'search_results':
-                    if self.search_results: self.play_stream(self.search_results[self.selected_index])
-            elif key == curses.KEY_DOWN:
-                limit = len(self.files) if self.view_mode == 'browser' else len(self.search_results)
-                self.selected_index = min(limit - 1, self.selected_index + 1)
-            elif key == curses.KEY_UP:
-                self.selected_index = max(0, self.selected_index - 1)
-            elif key == ord(' '): self.toggle_pause()
-            elif key == ord('l'): self.show_lyrics = not self.show_lyrics
-            elif key == ord('n'): self.handle_end_of_file() # Re-use logic for next
-            elif key == ord('p'):
-                if self.playback_history:
-                    idx = self.playback_history.pop()
-                    self.play_file(idx, push_history=False)
+            self.process_key(key)
 
 def main():
     curses.wrapper(lambda s: MusicPlayer(s).run())
