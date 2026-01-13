@@ -13,6 +13,11 @@ A powerful, lightweight terminal-based music player written in Python. It combin
 - **Visuals:**
   - Pulsing Cthulhu animation.
   - **Synced Lyrics:** Automatic fetching from LRCLib with fallback to Letras.mus.br and Lyrics.ovh.
+- **Queue System:**
+  - Build a custom playback queue from mixed sources (Local files + YouTube).
+  - **YouTube Playlists:** Paste a playlist URL to load all videos as search results.
+  - **Bulk Add:** Add all search results to the queue instantly.
+  - **Queue Preview:** See upcoming tracks directly in the player view.
 - **Smart Interface:**
   - **Recursive Library:** Scan entire folder trees.
   - **Search Mode:** Press `/` to find online tracks instantly.
@@ -52,6 +57,8 @@ musicplayer /path/to/music
 | **Arrow Up/Down** | Navigate files / Scroll Lyrics |
 | **Enter** | Play file / Open directory / Select Search Result |
 | **Space** | Play / Pause |
+| **a** | **Add to Queue** (File or Search Result) |
+| **A** (Shift+a) | **Bulk Add** (All Search Results to Queue) |
 | **/** | **Search Online** (YouTube default, use `sc:` for SoundCloud) |
 | **l** | Toggle Lyrics / Cthulhu View |
 | **D** (Shift+d) | **Set current directory as Default** (Persistent) |
@@ -68,7 +75,9 @@ musicplayer /path/to/music
 ## Advanced Search
 
 - **YouTube:** Just type your query (e.g., `Coldplay Yellow`).
+- **YouTube Playlists:** Paste a full YouTube Playlist URL to browse and import items.
 - **SoundCloud:** Prefix with `sc:` (e.g., `sc:Synthwave mix`).
+- **Queue Management:** Use `a` to enqueue individual items or `A` (Shift+a) to enqueue the entire search result list. The player will auto-start if idle.
 
 ## License
 
