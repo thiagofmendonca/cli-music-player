@@ -169,7 +169,6 @@ class MainWindow(QMainWindow):
         self.file_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_list.customContextMenuRequested.connect(self.show_library_context_menu)
         
-        lib_layout.addWidget(self.lbl_path)
         lib_layout.addWidget(self.file_list)
         self.tabs.addTab(self.library_tab, "Library")
 
