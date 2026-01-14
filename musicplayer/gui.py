@@ -3,44 +3,65 @@ import os
 import threading
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QSlider, QLabel, QListWidget, QListWidgetItem, 
-                             QLineEdit, QTabWidget, QProgressBar, QStyle)
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QSize
-from PyQt6.QtGui import QFont, QColor, QPalette
+                             QLineEdit, QTabWidget, QProgressBar, QStyle, QAbstractItemView,
+                             QMenu)
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QSize, pyqtSignal
+from PyQt6.QtGui import QFont, QColor, QPalette, QAction, QPixmap, QIcon
 
 from .engine import PlayerEngine
 from .utils import format_time
 
 class CthulhuPulse(QLabel):
     def __init__(self):
-        super().__init__(" ( o . o ) \n (  |||  ) \n/||\\/||\\/||\\ ")
+        super().__init__()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setFont(QFont("Monospace", 20, QFont.Weight.Bold))
-        self.setStyleSheet("color: #00ff00;")
-        self.frame = 0
-        self.frames = [
-            r""" ( o . o ) 
- (  |||  ) 
-/||\\/||\\/||\\ """,
-            r""" ( O . O ) 
- ( /|||\ ) 
-//||\\/||\\/||\\ """
+        self.setScaledContents(False) # Keep aspect ratio if possible, or True to fill
+        
+        # Load images
+        base_path = os.path.dirname(__file__)
+        self.pixmaps = [
+            QPixmap(os.path.join(base_path, "assets", "frame1.png")),
+            QPixmap(os.path.join(base_path, "assets", "frame2.png"))
         ]
+        
+        # Scale images if needed (optional, keeping original size for now unless too huge)
+        self.pixmaps = [p.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio) for p in self.pixmaps]
+
+        self.frame = 0
+        if self.pixmaps[0].isNull():
+             self.setText("Cthulhu Image Missing")
+        else:
+             self.setPixmap(self.pixmaps[0])
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.animate)
-        self.timer.start(400)
+        self.timer.start(500) # Slower pulse for images usually looks better
 
     def animate(self):
+        if self.pixmaps[0].isNull(): return
         self.frame = (self.frame + 1) % 2
-        self.setText(self.frames[self.frame])
+        self.setPixmap(self.pixmaps[self.frame])
 
 class MainWindow(QMainWindow):
+    search_finished = pyqtSignal(list)
+
     def __init__(self):
         super().__init__()
         self.engine = PlayerEngine()
         self.setWindowTitle("Cthulhu Music Player v0.9.1 (GUI)")
         self.setMinimumSize(900, 700)
+        
+        # Set Window Icon
+        base_path = os.path.dirname(__file__)
+        icon_path = os.path.join(base_path, "assets", "frame1.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+            
         self.init_ui()
         self.setup_connections()
+        
+        # Connect custom signal
+        self.search_finished.connect(self.show_search_results)
         
         # Initial scan
         self.engine.scan_directory()
@@ -52,17 +73,6 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-
-        # 1. Search Bar
-        search_layout = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search YouTube (use sc: for SoundCloud)...")
-        self.search_input.returnPressed.connect(self.start_search)
-        self.btn_search = QPushButton("Search")
-        self.btn_search.clicked.connect(self.start_search)
-        search_layout.addWidget(self.search_input)
-        search_layout.addWidget(self.btn_search)
-        main_layout.addLayout(search_layout)
 
         # 2. Tabs
         self.tabs = QTabWidget()
@@ -93,9 +103,21 @@ class MainWindow(QMainWindow):
         # Tab: Library
         self.library_tab = QWidget()
         lib_layout = QVBoxLayout(self.library_tab)
+        
+        # Filter Bar
+        self.lib_filter = QLineEdit()
+        self.lib_filter.setPlaceholderText("Filter files (Press Enter for deep recursive search)...")
+        self.lib_filter.textChanged.connect(self.filter_library)
+        self.lib_filter.returnPressed.connect(self.trigger_recursive_search)
+        lib_layout.addWidget(self.lib_filter)
+        
         self.lbl_path = QLabel(f"Path: {self.engine.current_dir}")
         self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.file_list.itemDoubleClicked.connect(self.on_file_double_clicked)
+        self.file_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.file_list.customContextMenuRequested.connect(self.show_library_context_menu)
+        
         lib_layout.addWidget(self.lbl_path)
         lib_layout.addWidget(self.file_list)
         self.tabs.addTab(self.library_tab, "Library")
@@ -103,10 +125,33 @@ class MainWindow(QMainWindow):
         # Tab: Search Results
         self.search_tab = QWidget()
         search_res_layout = QVBoxLayout(self.search_tab)
+        
+        # Search Bar moved here
+        search_bar_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search YouTube (use sc: for SoundCloud)...")
+        self.search_input.returnPressed.connect(self.start_search)
+        self.btn_search = QPushButton("Search")
+        self.btn_search.clicked.connect(self.start_search)
+        search_bar_layout.addWidget(self.search_input)
+        search_bar_layout.addWidget(self.btn_search)
+        search_res_layout.addLayout(search_bar_layout)
+        
         self.search_list = QListWidget()
+        self.search_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.search_list.itemDoubleClicked.connect(self.on_search_item_double_clicked)
+        self.search_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.search_list.customContextMenuRequested.connect(self.show_search_context_menu)
         search_res_layout.addWidget(self.search_list)
         self.tabs.addTab(self.search_tab, "Search Results")
+
+        # Tab: Queue
+        self.queue_tab = QWidget()
+        queue_layout = QVBoxLayout(self.queue_tab)
+        self.queue_list = QListWidget()
+        self.queue_list.itemDoubleClicked.connect(self.on_queue_item_double_clicked)
+        queue_layout.addWidget(self.queue_list)
+        self.tabs.addTab(self.queue_tab, "Queue")
 
         main_layout.addWidget(self.tabs)
 
@@ -118,7 +163,11 @@ class MainWindow(QMainWindow):
         progress_layout = QHBoxLayout()
         self.lbl_current_time = QLabel("00:00")
         self.progress_slider = QSlider(Qt.Orientation.Horizontal)
-        self.progress_slider.setEnabled(False)
+        self.progress_slider.setEnabled(True) # Enabled for seeking
+        self.progress_slider.sliderReleased.connect(self.on_seek_released)
+        self.progress_slider.sliderPressed.connect(self.on_seek_pressed)
+        self.is_seeking = False
+        
         self.lbl_total_time = QLabel("00:00")
         progress_layout.addWidget(self.lbl_current_time)
         progress_layout.addWidget(self.progress_slider)
@@ -182,6 +231,70 @@ class MainWindow(QMainWindow):
         self.engine.directory_scanned.connect(self.populate_file_list)
         self.engine.message_emitted.connect(self.statusBar().showMessage)
         self.engine.lyrics_loaded.connect(self.populate_lyrics)
+        self.engine.queue_changed.connect(self.populate_queue)
+
+    def trigger_recursive_search(self):
+        query = self.lib_filter.text()
+        if query:
+            self.statusBar().showMessage(f"Deep searching for: {query}...")
+            # We run this in a thread ideally, but for now direct call (it uses os.walk which is blocking but fast enough for local)
+            # Or better, let the engine handle threading if needed. Engine.search_local_files is synchronous now.
+            threading.Thread(target=self.engine.search_local_files, args=(query,), daemon=True).start()
+
+    def show_library_context_menu(self, pos):
+        menu = QMenu()
+        add_action = QAction("Add to Queue", self)
+        add_action.triggered.connect(lambda: self.add_selected_to_queue(self.file_list))
+        menu.addAction(add_action)
+        menu.exec(self.file_list.mapToGlobal(pos))
+
+    def show_search_context_menu(self, pos):
+        menu = QMenu()
+        add_action = QAction("Add to Queue", self)
+        add_action.triggered.connect(lambda: self.add_selected_to_queue(self.search_list))
+        menu.addAction(add_action)
+        menu.exec(self.search_list.mapToGlobal(pos))
+
+    def add_selected_to_queue(self, list_widget):
+        items = list_widget.selectedItems()
+        data_list = []
+        for item in items:
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if data['type'] != 'dir':
+                data_list.append(data)
+        
+        if data_list:
+            self.engine.add_to_queue(data_list)
+
+    @pyqtSlot(list)
+    def populate_queue(self, queue):
+        self.queue_list.clear()
+        for i, item in enumerate(queue):
+            name = item.get('title', item.get('name', 'Unknown'))
+            artist = item.get('artist', 'Unknown')
+            list_item = QListWidgetItem(f"{i+1}. {name} - {artist}")
+            list_item.setData(Qt.ItemDataRole.UserRole, i) # Store index
+            self.queue_list.addItem(list_item)
+        
+        # Refresh highlights in other lists
+        self.refresh_list_highlights(self.file_list)
+        self.refresh_list_highlights(self.search_list)
+
+    def refresh_list_highlights(self, list_widget):
+        count = list_widget.count()
+        for i in range(count):
+            item = list_widget.item(i)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if self.engine.is_in_queue(data):
+                item.setForeground(QColor(0, 255, 0))
+            else:
+                # Reset color (assuming default is white/theme dependent, or explicitly set white)
+                # Ideally we should use the theme's text color, but here we forced white/grey in theme
+                item.setForeground(QColor(255, 255, 255))
+
+    def on_queue_item_double_clicked(self, item):
+        idx = item.data(Qt.ItemDataRole.UserRole)
+        self.engine.play_queue_index(idx)
 
     @pyqtSlot(dict)
     def update_track_info(self, meta):
@@ -195,7 +308,16 @@ class MainWindow(QMainWindow):
         self.lbl_total_time.setText(format_time(total))
         if total > 0:
             self.progress_slider.setMaximum(int(total))
-            self.progress_slider.setValue(int(current))
+            if not self.is_seeking:
+                self.progress_slider.setValue(int(current))
+
+    def on_seek_pressed(self):
+        self.is_seeking = True
+
+    def on_seek_released(self):
+        pos = self.progress_slider.value()
+        self.engine.seek(pos)
+        self.is_seeking = False
 
     @pyqtSlot(bool)
     def update_play_icon(self, paused):
@@ -224,24 +346,44 @@ class MainWindow(QMainWindow):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data['type'] == 'dir':
             new_path = os.path.abspath(os.path.join(self.engine.current_dir, data['path']))
+            self.lib_filter.clear() # Clear filter on navigation
             self.engine.scan_directory(new_path)
         else:
             idx = self.file_list.row(item)
             self.engine.play_file(idx)
 
+    def filter_library(self, text):
+        count = self.file_list.count()
+        for i in range(count):
+            item = self.file_list.item(i)
+            item_text = item.text().lower()
+            # Keep parent dir visible always or filter it too? Let's keep it visible if it matches or is '..'
+            if '..' in item_text or text.lower() in item_text:
+                item.setHidden(False)
+            else:
+                item.setHidden(True)
+
     def start_search(self):
         query = self.search_input.text()
         if not query: return
         self.statusBar().showMessage(f"Searching for: {query}...")
+        print(f"[DEBUG] GUI Start Search: {query}")
         
         def run_search():
-            source = 'soundcloud' if query.startswith('sc:') else 'youtube'
-            q = query[3:] if source == 'soundcloud' else query
-            results = self.engine.searcher.search(q, source)
-            QTimer.singleShot(0, lambda: self.show_search_results(results))
+            try:
+                source = 'soundcloud' if query.startswith('sc:') else 'youtube'
+                q = query[3:] if source == 'soundcloud' else query
+                print(f"[DEBUG] Executing search backend: {q} ({source})")
+                results = self.engine.searcher.search(q, source)
+                print(f"[DEBUG] Search results count: {len(results)}")
+                # Emit signal to update UI from main thread
+                self.search_finished.emit(results)
+            except Exception as e:
+                print(f"[DEBUG] Search Thread Error: {e}")
         
         threading.Thread(target=run_search, daemon=True).start()
 
+    @pyqtSlot(list)
     def show_search_results(self, results):
         self.search_list.clear()
         for res in results:
