@@ -29,8 +29,9 @@ class PlayerEngine(QObject):
     message_emitted = pyqtSignal(str)
     directory_scanned = pyqtSignal(list)
 
-    def __init__(self):
+    def __init__(self, debug=False):
         super().__init__()
+        self.debug_mode = debug
         self.config = load_config()
         self.current_dir = self.config.get('default_dir', os.getcwd())
         if not os.path.isdir(self.current_dir):
@@ -61,6 +62,10 @@ class PlayerEngine(QObject):
         # Monitor thread
         self.monitor_thread = threading.Thread(target=self.ipc_loop, daemon=True)
         self.monitor_thread.start()
+
+    def log(self, message):
+        if self.debug_mode:
+            print(f"[DEBUG] {message}")
 
     def cleanup(self):
         self.running = False
@@ -134,6 +139,7 @@ class PlayerEngine(QObject):
                         changed = True
                     
                     if changed:
+                        self.log(f"Metadata changed: {self.metadata}")
                         self.track_changed.emit(self.metadata)
                         # Fetch lyrics if metadata changed
                         if self.metadata.get('artist') and self.metadata.get('title'):
@@ -171,14 +177,17 @@ class PlayerEngine(QObject):
         return None
 
     def fetch_lyrics(self, artist, title):
+        self.log(f"Fetching lyrics for: {artist} - {title}")
         # Prevent double fetching
         if getattr(self, '_last_fetched_key', None) == (artist, title):
+            self.log("Skipping duplicate fetch")
             return
         self._last_fetched_key = (artist, title)
 
         found_lyrics = False
         try:
             url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(artist)}&track_name={urllib.parse.quote(title)}"
+            self.log(f"Requesting LRCLIB: {url}")
             req = urllib.request.Request(url, headers={'User-Agent': 'CLI-Music-Player/1.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode())
@@ -188,15 +197,18 @@ class PlayerEngine(QObject):
                 elif data.get('plainLyrics'):
                     self.lyrics = [{'time': None, 'text': l} for l in data['plainLyrics'].split('\n')]
                     found_lyrics = True
-        except: pass
+        except Exception as e: 
+            self.log(f"LRCLIB Error: {e}")
         
         if not found_lyrics:
+             self.log("Falling back to letras.mus.br")
              res = self.fetch_from_letras_mus_br(artist, title)
              if res:
                  self.lyrics = res
                  found_lyrics = True
 
         if not found_lyrics:
+             self.log("Lyrics not found.")
              self.lyrics = [{'time': None, 'text': "Lyrics not found."}]
         
         self.lyrics_loaded.emit(self.lyrics)
@@ -228,6 +240,29 @@ class PlayerEngine(QObject):
                     rel_path = os.path.relpath(os.path.join(root, f), self.current_dir)
                     self.files.append({'name': rel_path, 'type': 'file', 'path': rel_path})
         self.directory_scanned.emit(self.files)
+
+    def search_local_files(self, query):
+        if not query:
+            self.scan_directory()
+            return
+            
+        results = []
+        try:
+            for root, _, files in os.walk(self.current_dir):
+                for f in sorted(files):
+                    if query.lower() in f.lower() and os.path.splitext(f)[1].lower() in AUDIO_EXTENSIONS:
+                        # Create a file object similar to scan_directory
+                        full_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(full_path, self.current_dir)
+                        results.append({'name': f, 'type': 'file', 'path': rel_path, 'full_path': full_path})
+            
+            # Update self.files so they can be played by index if needed, or just emit
+            # For this feature, we likely want to show them in the list.
+            # We replace self.files with search results for consistency in UI handling
+            self.files = results
+            self.directory_scanned.emit(self.files)
+        except Exception as e:
+            self.message_emitted.emit(f"Search error: {str(e)}")
 
     def get_next_index(self, current_idx):
         if self.shuffle:
@@ -277,7 +312,19 @@ class PlayerEngine(QObject):
                  
         self._start_mpv(target)
 
+    def play_queue_index(self, index):
+        if 0 <= index < len(self.queue):
+            # We play the selected item. 
+            # Logic decision: Do we remove previous items? 
+            # For a "Queue" (FIFO), usually yes. If we treat it as playlist, no.
+            # User asked for "Playlist", but the backend is built as "Queue".
+            # Compromise: Pop the item to play it.
+            item = self.queue.pop(index)
+            self.queue_changed.emit(self.queue)
+            self.play_queue_item(item)
+
     def _start_mpv(self, target):
+        self.log(f"Starting MPV: {target}")
         if self.mpv_process:
             self.send_ipc_command(["quit"])
             try: self.mpv_process.wait(timeout=0.2)
@@ -286,6 +333,9 @@ class PlayerEngine(QObject):
         self.paused = False
         self.position = 0
         self.duration = 0
+        # Reset last fetched key so re-playing the same song can refetch lyrics if needed (or not block if we improve logic)
+        self._last_fetched_key = None 
+        
         cmd = [
             self.mpv_bin,
             '--no-video',
@@ -329,6 +379,12 @@ class PlayerEngine(QObject):
         self.send_ipc_command(["set_property", "volume", self.volume])
         save_config({'volume': self.volume})
 
+    def seek(self, position):
+        self.send_ipc_command(["seek", position, "absolute"])
+        # Update position immediately to make UI responsive
+        self.position = position
+        self.position_changed.emit(self.position, self.duration)
+
     def is_in_queue(self, item):
         if item.get('type') == 'file':
             try:
@@ -347,14 +403,20 @@ class PlayerEngine(QObject):
                          return True
         return False
 
-    def add_to_queue(self, item):
-        # Normalize item for queue
-        if item.get('type') == 'file' and not os.path.isabs(item['path']):
-            item['path'] = os.path.abspath(os.path.join(self.current_dir, item['path']))
-        
-        self.queue.append(item)
+    def add_to_queue(self, items):
+        if not isinstance(items, list):
+            items = [items]
+            
+        added_count = 0
+        for item in items:
+            # Normalize item for queue
+            if item.get('type') == 'file' and not os.path.isabs(item['path']):
+                item['path'] = os.path.abspath(os.path.join(self.current_dir, item['path']))
+            self.queue.append(item)
+            added_count += 1
+            
         self.queue_changed.emit(self.queue)
-        self.message_emitted.emit(f"Added to queue: {item.get('title', item.get('name'))}")
+        self.message_emitted.emit(f"Added {added_count} items to queue")
         
         # Auto-play if idle
         if not self.mpv_process or self.get_property("idle-active"):

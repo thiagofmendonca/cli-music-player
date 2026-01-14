@@ -45,10 +45,11 @@ class CthulhuPulse(QLabel):
 class MainWindow(QMainWindow):
     search_finished = pyqtSignal(list)
 
-    def __init__(self):
+    def __init__(self, debug=False):
         super().__init__()
-        self.engine = PlayerEngine()
-        self.setWindowTitle("Cthulhu Music Player v0.9.1 (GUI)")
+        self.debug = debug
+        self.engine = PlayerEngine(debug=debug)
+        self.setWindowTitle("Cthulhu Music Player v1.0.0 (GUI)")
         self.setMinimumSize(900, 700)
         
         # Set Window Icon
@@ -367,19 +368,19 @@ class MainWindow(QMainWindow):
         query = self.search_input.text()
         if not query: return
         self.statusBar().showMessage(f"Searching for: {query}...")
-        print(f"[DEBUG] GUI Start Search: {query}")
+        if self.debug: print(f"[DEBUG] GUI Start Search: {query}")
         
         def run_search():
             try:
                 source = 'soundcloud' if query.startswith('sc:') else 'youtube'
                 q = query[3:] if source == 'soundcloud' else query
-                print(f"[DEBUG] Executing search backend: {q} ({source})")
+                if self.debug: print(f"[DEBUG] Executing search backend: {q} ({source})")
                 results = self.engine.searcher.search(q, source)
-                print(f"[DEBUG] Search results count: {len(results)}")
+                if self.debug: print(f"[DEBUG] Search results count: {len(results)}")
                 # Emit signal to update UI from main thread
                 self.search_finished.emit(results)
             except Exception as e:
-                print(f"[DEBUG] Search Thread Error: {e}")
+                if self.debug: print(f"[DEBUG] Search Thread Error: {e}")
         
         threading.Thread(target=run_search, daemon=True).start()
 
@@ -404,8 +405,13 @@ class MainWindow(QMainWindow):
         event.accept()
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Cthulhu Music Player (GUI)")
+    parser.add_argument('-d', '--debug', action='store_true', help="Enable debug logging")
+    args = parser.parse_args()
+
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(debug=args.debug)
     window.show()
     sys.exit(app.exec())
 
