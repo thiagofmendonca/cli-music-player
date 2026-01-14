@@ -1,14 +1,6 @@
+import sys
 import os
 import threading
-import time
-import socket
-import json
-import tempfile
-import subprocess
-import random
-import urllib.request
-import urllib.parse
-import re
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from .utils import slugify, format_time, parse_lrc
@@ -333,7 +325,7 @@ class PlayerEngine(QObject):
         self.paused = False
         self.position = 0
         self.duration = 0
-        # Reset last fetched key so re-playing the same song can refetch lyrics if needed (or not block if we improve logic)
+        # Reset last fetched key so re-playing the same song can refetch lyrics if needed
         self._last_fetched_key = None 
         
         cmd = [
@@ -344,8 +336,19 @@ class PlayerEngine(QObject):
             '--idle',
             target
         ]
+        
+        # Prepare environment
+        env = os.environ.copy()
+        # Fix for running system binary (mpv) from PyInstaller bundle on Linux
+        if sys.platform.startswith('linux') and getattr(sys, 'frozen', False):
+            env.pop('LD_LIBRARY_PATH', None)
+
         self.mpv_process = subprocess.Popen(
-            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            cmd, 
+            stdin=subprocess.DEVNULL, 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL,
+            env=env
         )
         self.status_changed.emit(False)
         self.track_changed.emit(self.metadata)
