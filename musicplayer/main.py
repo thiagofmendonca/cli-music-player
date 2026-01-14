@@ -58,7 +58,7 @@ class MusicPlayer:
         self.paused = False
         self.volume = 100
         self.running = True
-        self.view_mode = 'browser'
+        self.view_mode = 'player'
         self.shuffle = False
         self.library_mode = False 
         self.playback_history = [] 
@@ -75,7 +75,7 @@ class MusicPlayer:
         self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
         self.duration = 0
         self.position = 0
-        self.metadata = {}
+        self.metadata = {'title': 'No Music Playing', 'artist': 'Press [b] for Library'}
         
         # Lyrics State
         self.lyrics = None
@@ -111,6 +111,29 @@ class MusicPlayer:
         # Monitor thread
         self.monitor_thread = threading.Thread(target=self.ipc_loop, daemon=True)
         self.monitor_thread.start()
+
+    def is_in_queue(self, item):
+        # item can be from self.files (local) or self.search_results (stream)
+        # Check local file
+        if item.get('type') == 'file':
+            # Resolve absolute path for the item to check against queue
+            # Note: item from browser is relative or just name
+            try:
+                abs_path = os.path.abspath(os.path.join(self.current_dir, item['path']))
+                for q_item in self.queue:
+                    if q_item['type'] == 'file' and q_item['path'] == abs_path:
+                        return True
+            except: pass
+        else:
+            # Check stream by ID or URL
+            target_id = item.get('id')
+            target_url = item.get('url')
+            for q_item in self.queue:
+                if q_item['type'] != 'file':
+                     if (target_id and q_item.get('id') == target_id) or \
+                        (target_url and q_item.get('url') == target_url):
+                         return True
+        return False
 
     def handle_signal(self, signum, frame):
         self.cleanup()
@@ -460,7 +483,7 @@ class MusicPlayer:
              except Exception as e:
                  with open("error_log.txt", "a") as f: f.write(str(e) + "\n")
 
-        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [q] Back"
+        hint = "[n] Next  [p] Prev  [Space] Pause  [z] Shuffle  [l] Lyrics  [/] Search  [b] Library  [q] Quit"
         try: self.stdscr.addstr(height - 2, max(0, (width - len(hint)) // 2), hint[:width], curses.color_pair(1))
         except: pass
 
@@ -484,10 +507,20 @@ class MusicPlayer:
         for i in range(height - 2):
             file_idx = i + self.scroll_offset
             if file_idx >= len(self.files): break
-            style = curses.color_pair(1) if file_idx == self.selected_index else curses.A_NORMAL
-            try: self.stdscr.addstr(i + 1, 0, f"  {self.files[file_idx]['name']}"[:width], style)
+            
+            item = self.files[file_idx]
+            is_selected = (file_idx == self.selected_index)
+            is_queued = self.is_in_queue(item)
+            
+            style = curses.A_NORMAL
+            if is_selected:
+                style = curses.color_pair(1)
+            elif is_queued:
+                style = curses.color_pair(2) # Green for queued
+
+            try: self.stdscr.addstr(i + 1, 0, f"  {item['name']}"[:width], style)
             except: pass
-        help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle | [a] Queue"
+        help_txt = "[R]ecursive | [/] Search | [D]efault Dir | [z]Shuffle | [a] Queue | [m] Player"
         try: self.stdscr.addstr(height-1, 0, help_txt[:width], curses.color_pair(6))
         except: pass
         if time.time() - self.message_time < 2 and self.message:
@@ -504,12 +537,22 @@ class MusicPlayer:
         for i in range(height - 2):
             idx = i + self.scroll_offset
             if idx >= len(self.search_results): break
-            style = curses.color_pair(1) if idx == self.selected_index else curses.A_NORMAL
-            name = f"{self.search_results[idx]['title']} - {self.search_results[idx]['artist']}"
+            
+            item = self.search_results[idx]
+            is_selected = (idx == self.selected_index)
+            is_queued = self.is_in_queue(item)
+            
+            style = curses.A_NORMAL
+            if is_selected:
+                style = curses.color_pair(1)
+            elif is_queued:
+                style = curses.color_pair(2) # Green
+
+            name = f"{item['title']} - {item['artist']}"
             try: self.stdscr.addstr(i+1, 0, f"  {name}"[:width], style)
             except: pass
         
-        hint = "[Enter] Play | [a] Add One | [A] Add All | [q] Back"
+        hint = "[Enter] Play | [a] Add One | [A] Add All | [q] Back | [m] Player"
         try: self.stdscr.addstr(height-1, 0, hint[:width], curses.color_pair(6))
         except: pass
 
@@ -525,14 +568,19 @@ class MusicPlayer:
                 self.selected_index = 0
                 self.scroll_offset = 0
         elif key == 27: self.is_searching_input = False
-        elif key == 127: 
+        elif key in (127, curses.KEY_BACKSPACE, 8): 
             if self.search_query: self.search_query.pop()
         elif 32 <= key <= 126: self.search_query.append(chr(key))
 
     def process_key(self, key):
         if key == ord('q'): 
-            if self.view_mode != 'browser': self.view_mode = 'browser'
-            else: self.running = False
+            if self.view_mode != 'browser' and self.view_mode != 'player': self.view_mode = 'browser'
+            elif self.view_mode == 'player': self.running = False
+            else: self.running = False # Quit from browser
+        elif key == ord('m'):
+            self.view_mode = 'player'
+        elif key == ord('b'):
+            self.view_mode = 'browser'
         elif key == ord('D'):
             if save_config({'default_dir': self.current_dir}):
                 self.message = " Default Dir Saved "
