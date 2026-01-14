@@ -1,6 +1,6 @@
 # FreeThullu Music Player 🐙🎵
 
-**Version 1.0.4**
+**Version 1.0.5**
 
 A powerful, hybrid music player that summons your beats from the deep.
 Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode for terminal dwellers.
@@ -27,7 +27,7 @@ Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode
 ### Via PIP
 
 ```bash
-pip install freethullu-music-player
+pip install cli-music-player-cthulhu
 ```
 
 ### System Requirements
