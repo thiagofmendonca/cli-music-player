@@ -1,86 +1,89 @@
-# CLI Music Player (Cthulhu Edition)
+# Cthulhu Music Player 🐙🎵
 
-A powerful, lightweight terminal-based music player written in Python. It combines a robust local file browser with online streaming capabilities (YouTube, SoundCloud) and a unique visual style featuring a pulsing Cthulhu and synced lyrics.
+**Version 1.0.0**
 
-![Demo](demo.gif)
+A powerful, hybrid music player that summons your beats from the deep.
+Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode for terminal dwellers.
 
-## Features
+## ✨ Features
 
-- **Hybrid Playback:**
-  - **Local:** Plays MP3, FLAC, OGG, WAV, M4A, and more.
-  - **Online:** Search and stream directly from **YouTube** and **SoundCloud**.
-- **Robust Engine:** Uses `mpv` as the core backend for best-in-class format support and stability.
-- **Visuals:**
-  - Pulsing Cthulhu animation.
-  - **Synced Lyrics:** Automatic fetching from LRCLib with fallback to Letras.mus.br and Lyrics.ovh.
-- **Queue System:**
-  - Build a custom playback queue from mixed sources (Local files + YouTube).
-  - **YouTube Playlists:** Paste a playlist URL to load all videos as search results.
-  - **Bulk Add:** Add all search results to the queue instantly.
-  - **Queue Preview:** See upcoming tracks directly in the player view.
-- **Smart Interface:**
-  - **Recursive Library:** Scan entire folder trees.
-  - **Search Mode:** Press `/` to find online tracks instantly.
-  - **Persistence:** Save your default music directory.
-- **Cross-Platform:**
-  - **Linux:** Works with system `mpv`.
-  - **Windows:** Automatically downloads a portable `mpv` if missing.
+- **Hybrid Interface:**
+  - **GUI:** Modern Dark Theme, Tabbed Interface (Now Playing, Library, Search, Queue), and Animated Visuals.
+  - **CLI:** Lightweight, keyboard-driven terminal interface.
+- **Universal Playback:**
+  - **Local Library:** Deep recursive scanning, instant filtering, and file management.
+  - **Online Streaming:** Seamless **YouTube** and **SoundCloud** (prefix `sc:`) integration.
+- **Immersive Experience:**
+  - **Animated Cthulhu:** Watch the Great Old One pulse to the rhythm.
+  - **Synced Lyrics:** Automatic fetching from LRCLib and Letras.mus.br.
+- **Smart Queue:**
+  - Manage your playlist with ease.
+  - **Context Menus:** Right-click to add multiple items to the queue.
+  - **Jump:** Double-click any item in the queue to play immediately.
+- **Cross-Platform:** Native support for **Linux** and **Windows** (with auto-mpv setup).
 
-## Installation
+## 🚀 Installation
 
-### Via PIP (Recommended)
+### Via PIP
 
 ```bash
 pip install cli-music-player-cthulhu
 ```
 
-### Requirements
+### System Requirements
 
-- **Python 3.8+**
-- **Linux:** You must install `mpv` (e.g., `sudo pacman -S mpv` or `sudo apt install mpv`).
-- **Windows:** No extra steps! The player downloads a standalone `mpv` on first run if needed.
+- **Python 3.9+**
+- **Linux:** Requires `mpv` (`sudo apt install mpv` / `sudo pacman -S mpv`).
+- **Windows:** Auto-downloads `mpv` on first run.
 
-## Usage
+## 🎮 Usage
 
-Run the player:
+### 🖥️ Graphical Interface (Recommended)
+
+Launch the full experience:
+
+```bash
+musicplayer-gui
+```
+
+**Controls:**
+- **Navigation:** Use tabs to switch views.
+- **Library:** Type in the filter box. **Press Enter** to trigger a deep recursive search in subfolders.
+- **Search:** Type queries for YouTube. Prefix with `sc:` for SoundCloud.
+- **Queueing:** Select multiple items (Ctrl/Shift+Click) -> Right Click -> *Add to Queue*.
+- **Debug Mode:** Run `musicplayer-gui --debug` to see backend logs.
+
+### 📟 Terminal Interface
+
+Launch the lightweight TUI:
 
 ```bash
 musicplayer
-# OR open a specific folder:
-musicplayer /path/to/music
 ```
 
-### Controls
+*Controls: `Space` (Pause), `/` (Search), `a` (Queue), `q` (Quit).*
 
-| Key | Action |
-| :--- | :--- |
-| **Arrow Up/Down** | Navigate files / Scroll Lyrics |
-| **Enter** | Play file / Open directory / Select Search Result |
-| **Space** | Play / Pause |
-| **a** | **Add to Queue** (File or Search Result) |
-| **A** (Shift+a) | **Bulk Add** (All Search Results to Queue) |
-| **/** | **Search Online** (YouTube default, use `sc:` for SoundCloud) |
-| **l** | Toggle Lyrics / Cthulhu View |
-| **D** (Shift+d) | **Set current directory as Default** (Persistent) |
-| **n** | Next Track |
-| **p** | Previous Track (History-aware) |
-| **z** | Toggle Shuffle Mode |
-| **R** (Shift+r) | Load Recursive Library (all subfolders) |
-| **b** | **Open Library/Browser** (from Player view) |
-| **m** | **Back to Player** (from Library or Search views) |
-| **+ / -** | Volume Up / Down |
-| **s** | Stop |
-| **q** | Quit (from Player/Browser) or Back to Browser (from Search) |
+## 📦 Building from Source
 
-*Queued items are highlighted in **green** in the browser and search results.*
+To build standalone executables (Linux/Windows):
 
-## Advanced Search
+1. **Clone and Install Dependencies:**
+   ```bash
+   git clone https://github.com/thiagofmendonca/cli-music-player.git
+   cd cli-music-player
+   pip install .
+   pip install pyinstaller
+   ```
 
-- **YouTube:** Just type your query (e.g., `Coldplay Yellow`).
-- **YouTube Playlists:** Paste a full YouTube Playlist URL to browse and import items.
-- **SoundCloud:** Prefix with `sc:` (e.g., `sc:Synthwave mix`).
-- **Queue Management:** Use `a` to enqueue individual items or `A` (Shift+a) to enqueue the entire search result list. The player will auto-start if idle.
+2. **Build:**
+   ```bash
+   # Linux
+   pyinstaller --noconfirm --onefile --windowed --name "CthulhuPlayer" --add-data "musicplayer/assets:musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   
+   # Windows (PowerShell)
+   pyinstaller --noconfirm --onefile --windowed --name "CthulhuPlayer" --add-data "musicplayer/assets;musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   ```
 
-## License
+## 📜 License
 
 MIT
