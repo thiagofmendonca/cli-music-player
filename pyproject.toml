@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-music-player-cthulhu"
-version = "1.0.1"
+version = "1.0.2"
 authors = [
   { name="Thiago Mendonça", email="tfariamendonca@gmail.com" },
 ]
