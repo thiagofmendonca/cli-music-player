@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.debug = debug
         self.engine = PlayerEngine(debug=debug)
-        self.setWindowTitle("Cthulhu Music Player v1.0.2 (GUI)")
+        self.setWindowTitle("FreeThullu Music Player v1.0.4 (GUI)")
         self.setMinimumSize(900, 700)
         
         # Set Window Icon
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
         about_layout = QVBoxLayout(self.about_tab)
         about_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_about = QLabel("<h2>Cthulhu Music Player</h2>")
+        lbl_about = QLabel("<h2>FreeThullu Music Player</h2>")
         lbl_about.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         lbl_repo = QLabel('<a href="https://github.com/thiagofmendonca/cli-music-player" style="color: #2a82da;">GitHub Repository</a>')
@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
         lbl_insta.setOpenExternalLinks(True)
         lbl_insta.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_v = QLabel("Version 1.0.2")
+        lbl_v = QLabel("Version 1.0.4")
         lbl_v.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         about_layout.addStretch()

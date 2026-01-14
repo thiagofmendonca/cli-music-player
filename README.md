@@ -1,6 +1,6 @@
-# Cthulhu Music Player 🐙🎵
+# FreeThullu Music Player 🐙🎵
 
-**Version 1.0.0**
+**Version 1.0.4**
 
 A powerful, hybrid music player that summons your beats from the deep.
 Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode for terminal dwellers.
@@ -14,7 +14,7 @@ Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode
   - **Local Library:** Deep recursive scanning, instant filtering, and file management.
   - **Online Streaming:** Seamless **YouTube** and **SoundCloud** (prefix `sc:`) integration.
 - **Immersive Experience:**
-  - **Animated Cthulhu:** Watch the Great Old One pulse to the rhythm.
+  - **Animated FreeThullu:** Watch the Great Old One pulse to the rhythm.
   - **Synced Lyrics:** Automatic fetching from LRCLib and Letras.mus.br.
 - **Smart Queue:**
   - Manage your playlist with ease.
@@ -27,7 +27,7 @@ Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode
 ### Via PIP
 
 ```bash
-pip install cli-music-player-cthulhu
+pip install freethullu-music-player
 ```
 
 ### System Requirements
@@ -78,12 +78,12 @@ To build standalone executables (Linux/Windows):
 2. **Build:**
    ```bash
    # Linux
-   pyinstaller --noconfirm --onefile --windowed --name "CthulhuPlayer" --add-data "musicplayer/assets:musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets:musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
    
    # Windows (PowerShell)
-   pyinstaller --noconfirm --onefile --windowed --name "CthulhuPlayer" --add-data "musicplayer/assets;musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
    ```
 
 ## 📜 License
 
-MIT
+GNU Affero General Public License v3.0 (AGPLv3)

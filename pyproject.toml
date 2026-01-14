@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cli-music-player-cthulhu"
-version = "1.0.2"
+name = "freethullu-music-player"
+version = "1.0.4"
 authors = [
   { name="Thiago Mendonça", email="tfariamendonca@gmail.com" },
 ]
@@ -20,7 +20,7 @@ dependencies = [
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: POSIX :: Linux",
 ]
 
