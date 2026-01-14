@@ -1,6 +1,15 @@
 import sys
 import os
 import threading
+import time
+import socket
+import json
+import tempfile
+import subprocess
+import random
+import urllib.request
+import urllib.parse
+import re
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from .utils import slugify, format_time, parse_lrc
