@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
         self.search_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.search_list.customContextMenuRequested.connect(self.show_search_context_menu)
         search_res_layout.addWidget(self.search_list)
-        self.tabs.addTab(self.search_tab, "Search Results")
+        self.tabs.addTab(self.search_tab, "Online Search")
 
         # Tab: Queue
         self.queue_tab = QWidget()
