@@ -13,3 +13,5 @@ venv/
 dist/
 *.egg-info/
 error_log.txt
+build/
+*.spec
