@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QLineEdit, QTabWidget, QProgressBar, QStyle, QAbstractItemView,
                              QMenu)
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QSize, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QPalette, QAction, QPixmap, QIcon
+from PyQt6.QtGui import QFont, QColor, QPalette, QAction, QPixmap, QIcon, QKeySequence, QShortcut
 
 from .engine import PlayerEngine
 from .utils import format_time
@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
             
         self.init_ui()
+        self.setup_shortcuts()
         self.setup_connections()
         
         # Connect custom signal
@@ -79,6 +80,21 @@ class MainWindow(QMainWindow):
         
         # Initial scan
         self.engine.scan_directory()
+
+    def setup_shortcuts(self):
+        # Space for Play/Pause
+        self.shortcut_space = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        self.shortcut_space.activated.connect(self.engine.toggle_pause)
+        
+        # Media Keys
+        self.shortcut_play = QShortcut(QKeySequence(Qt.Key.Key_MediaPlay), self)
+        self.shortcut_play.activated.connect(self.engine.toggle_pause)
+        
+        self.shortcut_stop = QShortcut(QKeySequence(Qt.Key.Key_MediaStop), self)
+        self.shortcut_stop.activated.connect(self.engine.stop_music)
+        
+        self.shortcut_next = QShortcut(QKeySequence(Qt.Key.Key_MediaNext), self)
+        self.shortcut_next.activated.connect(self.engine.handle_end_of_file)
 
     def init_ui(self):
         # Dark Theme
@@ -242,6 +258,9 @@ class MainWindow(QMainWindow):
         self.engine.track_changed.connect(self.update_track_info)
         self.engine.position_changed.connect(self.update_progress)
         self.engine.status_changed.connect(self.update_play_icon)
+        # Fix animation state
+        self.engine.status_changed.connect(lambda paused: self.cthulhu.set_playing(not paused))
+        
         self.engine.directory_scanned.connect(self.populate_file_list)
         self.engine.message_emitted.connect(self.statusBar().showMessage)
         self.engine.lyrics_loaded.connect(self.populate_lyrics)
@@ -417,24 +436,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.engine.cleanup()
         event.accept()
-
-    def keyPressEvent(self, event):
-        key = event.key()
-        if key == Qt.Key.Key_Space:
-            self.engine.toggle_pause()
-        elif key == Qt.Key.Key_MediaPlay:
-            self.engine.toggle_pause()
-        elif key == Qt.Key.Key_MediaStop:
-            self.engine.stop_music()
-        elif key == Qt.Key.Key_MediaNext:
-            self.engine.handle_end_of_file() # Next track
-        elif key == Qt.Key.Key_MediaPrevious:
-            # Implement prev track logic if available in engine, currently play_file handles history manually?
-            # Engine has playback_history. We need a prev method.
-            # For now, just ignore or add prev method.
-            pass
-        else:
-            super().keyPressEvent(event)
 
 def main():
     import argparse

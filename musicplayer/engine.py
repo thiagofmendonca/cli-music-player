@@ -366,8 +366,15 @@ class PlayerEngine(QObject):
         if self.mpv_process:
             self.send_ipc_command(["stop"])
         self.playing_index = -1
-        self.paused = False
-        self.status_changed.emit(False)
+        self.paused = False # Or True? Logically "stopped"
+        # We need to ensure animation stops. 
+        # GUI interprets status_changed(False) as "Not Paused" -> Playing?
+        # Wait, status_changed is (paused: bool). 
+        # If paused=True, animation stops. 
+        # If stopped, we also want animation to stop.
+        # Let's emit status_changed(True) when stopped? Or handle "stopped" state separately?
+        # Better: status_changed emits 'paused' state. If stopped, it's effectively paused/idle.
+        self.status_changed.emit(True) 
 
     def handle_end_of_file(self):
         if self.queue:
