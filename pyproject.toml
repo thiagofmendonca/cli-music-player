@@ -14,7 +14,8 @@ requires-python = ">=3.8"
 dependencies = [
     "yt-dlp>=2023.0.0",
     "windows-curses; sys_platform == 'win32'",
-    "py7zr; sys_platform == 'win32'"
+    "py7zr; sys_platform == 'win32'",
+    "PyQt6>=6.4.0"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -24,6 +25,7 @@ classifiers = [
 
 [project.scripts]
 musicplayer = "musicplayer.main:main"
+musicplayer-gui = "musicplayer.gui:main"
 
 [tool.setuptools]
 packages = ["musicplayer"]
