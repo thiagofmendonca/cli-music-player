@@ -66,11 +66,13 @@ musicplayer /path/to/music
 | **p** | Previous Track (History-aware) |
 | **z** | Toggle Shuffle Mode |
 | **R** (Shift+r) | Load Recursive Library (all subfolders) |
-| **B** (Shift+b) | Return to Browser Mode |
+| **b** | **Open Library/Browser** (from Player view) |
+| **m** | **Back to Player** (from Library or Search views) |
 | **+ / -** | Volume Up / Down |
-| **Tab** | Toggle "Now Playing" View |
 | **s** | Stop |
-| **q** | Quit (or go back) |
+| **q** | Quit (from Player/Browser) or Back to Browser (from Search) |
+
+*Queued items are highlighted in **green** in the browser and search results.*
 
 ## Advanced Search
 
