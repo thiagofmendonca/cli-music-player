@@ -39,9 +39,7 @@ class PlayerEngine(QObject):
             self.current_dir = os.getcwd()
 
         self.mpv_bin = get_mpv_path() or download_mpv()
-        if not self.mpv_bin:
-            raise RuntimeError("MPV player not found.")
-
+        
         self.files = []
         self.queue = []
         self.playing_index = -1

@@ -4,7 +4,7 @@ import threading
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QSlider, QLabel, QListWidget, QListWidgetItem, 
                              QLineEdit, QTabWidget, QProgressBar, QStyle, QAbstractItemView,
-                             QMenu)
+                             QMenu, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QSize, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QPalette, QAction, QPixmap, QIcon, QKeySequence, QShortcut
 
@@ -80,6 +80,14 @@ class MainWindow(QMainWindow):
         
         # Initial scan
         self.engine.scan_directory()
+        
+        # Check for MPV
+        if not self.engine.mpv_bin:
+            QMessageBox.critical(self, "MPV Missing", 
+                                "The 'mpv' player was not found on your system.\n\n"
+                                "Please install it to enable playback:\n"
+                                "- Linux: sudo apt install mpv (or your manager)\n"
+                                "- Windows: It should have downloaded automatically, check your internet.")
 
     def setup_shortcuts(self):
         # Space for Play/Pause
