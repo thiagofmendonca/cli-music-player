@@ -35,12 +35,25 @@ class CthulhuPulse(QLabel):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.animate)
-        self.timer.start(500) # Slower pulse for images usually looks better
+        self.timer.start(400)
+        self.is_playing = False
 
     def animate(self):
+        if not self.is_playing:
+            # Show static frame (e.g., frame 0) when paused
+            if not self.pixmaps[0].isNull():
+                self.setPixmap(self.pixmaps[0])
+            return
+            
         if self.pixmaps[0].isNull(): return
         self.frame = (self.frame + 1) % 2
         self.setPixmap(self.pixmaps[self.frame])
+
+    def set_playing(self, playing):
+        self.is_playing = playing
+        if not playing:
+            # Force update to static frame immediately
+            self.animate()
 
 class MainWindow(QMainWindow):
     search_finished = pyqtSignal(list)
@@ -324,6 +337,7 @@ class MainWindow(QMainWindow):
     def update_play_icon(self, paused):
         icon = QStyle.StandardPixmap.SP_MediaPause if not paused else QStyle.StandardPixmap.SP_MediaPlay
         self.btn_play.setIcon(self.style().standardIcon(icon))
+        self.cthulhu.set_playing(not paused)
 
     @pyqtSlot(list)
     def populate_file_list(self, files):
@@ -403,6 +417,24 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.engine.cleanup()
         event.accept()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_Space:
+            self.engine.toggle_pause()
+        elif key == Qt.Key.Key_MediaPlay:
+            self.engine.toggle_pause()
+        elif key == Qt.Key.Key_MediaStop:
+            self.engine.stop_music()
+        elif key == Qt.Key.Key_MediaNext:
+            self.engine.handle_end_of_file() # Next track
+        elif key == Qt.Key.Key_MediaPrevious:
+            # Implement prev track logic if available in engine, currently play_file handles history manually?
+            # Engine has playback_history. We need a prev method.
+            # For now, just ignore or add prev method.
+            pass
+        else:
+            super().keyPressEvent(event)
 
 def main():
     import argparse

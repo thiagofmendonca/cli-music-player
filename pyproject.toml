@@ -15,7 +15,8 @@ dependencies = [
     "yt-dlp>=2023.0.0",
     "windows-curses; sys_platform == 'win32'",
     "py7zr; sys_platform == 'win32'",
-    "PyQt6>=6.4.0"
+    "PyQt6>=6.4.0",
+    "mpris2; sys_platform == 'linux'"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
