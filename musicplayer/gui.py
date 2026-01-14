@@ -149,7 +149,20 @@ class MainWindow(QMainWindow):
         self.lib_filter.returnPressed.connect(self.trigger_recursive_search)
         lib_layout.addWidget(self.lib_filter)
         
-        self.lbl_path = QLabel(f"Path: {self.engine.current_dir}")
+        # Navigation Bar (Path)
+        nav_layout = QHBoxLayout()
+        self.btn_up = QPushButton("⬆")
+        self.btn_up.setFixedWidth(30)
+        self.btn_up.clicked.connect(self.go_up_dir)
+        
+        self.path_input = QLineEdit()
+        self.path_input.setText(self.engine.current_dir)
+        self.path_input.returnPressed.connect(self.navigate_to_path)
+        
+        nav_layout.addWidget(self.btn_up)
+        nav_layout.addWidget(self.path_input)
+        lib_layout.addLayout(nav_layout)
+        
         self.file_list = QListWidget()
         self.file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.file_list.itemDoubleClicked.connect(self.on_file_double_clicked)
@@ -398,7 +411,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(list)
     def populate_file_list(self, files):
         self.file_list.clear()
-        self.lbl_path.setText(f"Path: {self.engine.current_dir}")
+        self.path_input.setText(self.engine.current_dir)
         for f in files:
             icon = "📁 " if f['type'] == 'dir' else "🎵 "
             item = QListWidgetItem(f"{icon}{f['name']}")
@@ -406,6 +419,19 @@ class MainWindow(QMainWindow):
             if self.engine.is_in_queue(f):
                 item.setForeground(QColor(0, 255, 0))
             self.file_list.addItem(item)
+        self.refresh_list_highlights(self.file_list)
+
+    def go_up_dir(self):
+        parent_dir = os.path.dirname(self.engine.current_dir)
+        if os.path.isdir(parent_dir):
+            self.engine.scan_directory(parent_dir)
+
+    def navigate_to_path(self):
+        path = self.path_input.text()
+        if os.path.isdir(path):
+            self.engine.scan_directory(path)
+        else:
+            self.path_input.setText(self.engine.current_dir) # Revert if invalid
 
     @pyqtSlot(list)
     def populate_lyrics(self, lyrics):
