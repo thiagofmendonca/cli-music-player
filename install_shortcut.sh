@@ -2,7 +2,7 @@
 
 # Define paths
 APP_NAME="FreeThullu Music Player"
-EXEC_NAME="musicplayer-gui"
+EXEC_NAME="musicplayer"
 ICON_NAME="freethullu-icon.png"
 DESKTOP_FILE="freethullu.desktop"
 ICON_URL="https://raw.githubusercontent.com/thiagofmendonca/cli-music-player/main/musicplayer/assets/frame1.png"

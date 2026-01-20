@@ -8,8 +8,10 @@ Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode
 ## ✨ Features
 
 - **Hybrid Interface:**
-  - **GUI:** Modern Dark Theme, Tabbed Interface (Now Playing, Library, Search, Queue), and Animated Visuals.
-  - **CLI:** Lightweight, keyboard-driven terminal interface.
+  - **Unified Binary:** A single executable for all modes.
+  - **GUI (Default):** Modern Dark Theme, Tabbed Interface (Now Playing, Library, Search, Queue), and Animated Visuals.
+  - **CLI (`--cli`):** Lightweight, keyboard-driven terminal interface.
+- **Robust Debugging:** Use `--debug` to troubleshoot playback or scraping issues.
 - **Universal Playback:**
   - **Local Library:** Deep recursive scanning, instant filtering, and file management.
   - **Online Streaming:** Seamless **YouTube** and **SoundCloud** (prefix `sc:`) integration.
@@ -38,30 +40,44 @@ pip install cli-music-player-cthulhu
 
 ## 🎮 Usage
 
-### 🖥️ Graphical Interface (Recommended)
-
-Launch the full experience:
+Launch the player using the unified command:
 
 ```bash
-musicplayer-gui
+# Start in GUI mode (Default)
+musicplayer
+
+# Start in CLI mode (Terminal)
+musicplayer --cli
+
+# Enable Debug Mode (Works for both GUI and CLI)
+musicplayer --debug
+musicplayer --cli --debug
+
+# You can also use the alias:
+freethullu-player
 ```
+
+### 🖥️ Graphical Interface (GUI)
+Launch the full experience with animated visuals and tabbed navigation.
 
 **Controls:**
 - **Navigation:** Use tabs to switch views.
 - **Library:** Type in the filter box. **Press Enter** to trigger a deep recursive search in subfolders.
 - **Search:** Type queries for YouTube. Prefix with `sc:` for SoundCloud.
 - **Queueing:** Select multiple items (Ctrl/Shift+Click) -> Right Click -> *Add to Queue*.
-- **Debug Mode:** Run `musicplayer-gui --debug` to see backend logs.
 
-### 📟 Terminal Interface
+### 📟 Terminal Interface (CLI)
+A lightweight, keyboard-driven interface for terminal fans.
 
-Launch the lightweight TUI:
+**Controls:** 
+- `Space`: Pause/Play
+- `/`: Online Search
+- `a`: Add current selection to Queue
+- `n`: Next track
+- `p`: Previous track
+- `q`: Quit
 
-```bash
-musicplayer
-```
-
-*Controls: `Space` (Pause), `/` (Search), `a` (Queue), `q` (Quit).*
+---
 
 ## 📦 Building from Source
 
@@ -78,10 +94,11 @@ To build standalone executables (Linux/Windows):
 2. **Build:**
    ```bash
    # Linux
-   pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets:musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   python build_exe.py
    
-   # Windows (PowerShell)
-   pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_gui.py
+   # Windows (via GitHub Actions recommended)
+   # Or manual: Ensure libmpv-2.dll is in the folder
+   pyinstaller --noconfirm --onefile --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --add-data "VERSION;." --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_musicplayer.py
    ```
 
 ## 📜 License

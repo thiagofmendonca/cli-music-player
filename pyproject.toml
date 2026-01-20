@@ -30,8 +30,9 @@ classifiers = [
 ]
 
 [project.scripts]
-musicplayer = "musicplayer.main:main"
+musicplayer = "musicplayer.launcher:launch"
 musicplayer-gui = "musicplayer.gui:main"
+freethullu-player = "musicplayer.launcher:launch"
 
 [tool.setuptools]
 packages = ["musicplayer"]
