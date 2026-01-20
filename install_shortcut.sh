@@ -52,7 +52,7 @@ $ICON_ENTRY
 Terminal=false
 Categories=Audio;Music;Player;
 Keywords=music;player;mpv;youtube;
-StartupWMClass=FreeThullu Music Player v1.0.7 (GUI)
+StartupWMClass=FreeThullu Music Player v1.0.8 (GUI)
 EOF
 
 # Refresh database and KDE cache
