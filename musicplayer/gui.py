@@ -500,14 +500,17 @@ class MainWindow(QMainWindow):
         self.engine.cleanup()
         event.accept()
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Cthulhu Music Player (GUI)")
-    parser.add_argument('-d', '--debug', action='store_true', help="Enable debug logging")
-    args = parser.parse_args()
+def main(debug=None):
+    if debug is None:
+        import argparse
+        parser = argparse.ArgumentParser(description="Cthulhu Music Player (GUI)")
+        parser.add_argument('-d', '--debug', action='store_true', help="Enable debug logging")
+        # Ignore unknown args to avoid issues with --cli
+        args, _ = parser.parse_known_args()
+        debug = args.debug
 
     app = QApplication(sys.argv)
-    window = MainWindow(debug=args.debug)
+    window = MainWindow(debug=debug)
     window.show()
     sys.exit(app.exec())
 

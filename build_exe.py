@@ -19,6 +19,9 @@ shutil.rmtree("dist", ignore_errors=True)
 # Collect all yt_dlp submodules (extractors, etc)
 hidden_yt_dlp = collect_submodules('yt_dlp')
 
+# Use correct separator for PyInstaller (colon on Linux, semicolon on Windows)
+sep = os.pathsep
+
 # Build command arguments
 args = [
     'run_musicplayer.py',
@@ -27,8 +30,8 @@ args = [
     '--clean',
     '--noconfirm',
     # Include the source package files as data just in case
-    '--add-data=musicplayer;musicplayer',
-    '--add-data=VERSION;.',
+    f'--add-data=musicplayer{sep}musicplayer',
+    f'--add-data=VERSION{sep}.',
     # Hidden imports that dynamic analysis might miss
     '--hidden-import=musicplayer',
     '--hidden-import=musicplayer.mpv_setup',

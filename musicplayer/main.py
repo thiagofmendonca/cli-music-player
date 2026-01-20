@@ -24,8 +24,9 @@ from .config import load_config, save_config
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
 
 class MusicPlayer:
-    def __init__(self, stdscr):
+    def __init__(self, stdscr, debug=False):
         self.stdscr = stdscr
+        self.debug = debug
         
         # Determine start directory
         self.config = load_config()
@@ -650,8 +651,8 @@ class MusicPlayer:
                 continue
             self.process_key(key)
 
-def main():
-    curses.wrapper(lambda s: MusicPlayer(s).run())
+def main(debug=False):
+    curses.wrapper(lambda s: MusicPlayer(s, debug=debug).run())
 
 if __name__ == "__main__":
     main()
