@@ -1,36 +1,31 @@
 import os
 import sys
 import urllib.request
-import py7zr
+import subprocess
 
 def download_and_extract():
-    # URL direta para o build recente (SourceForge mirror automático)
-    url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250118-git-468d34c.7z/download"
+    # URL verificada do GitHub
+    url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260120/mpv-dev-x86_64-20260120-git-b7e8fe9.7z"
     dest_7z = "libmpv.7z"
+    dll_name = "libmpv-2.dll" # Nome exato dentro do 7z
     
     print(f"Downloading {url}...")
     try:
-        # User-Agent é crucial para o SourceForge não bloquear
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        )
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response, open(dest_7z, 'wb') as out_file:
-            data = response.read()
-            out_file.write(data)
-            print(f"Downloaded {len(data)} bytes")
+            out_file.write(response.read())
             
-        print("Extracting mpv-2.dll...")
-        # Usando py7zr se disponível, ou fallback para comando de sistema se necessário
-        # Mas no actions instalamos py7zr via pip se quisermos, ou usamos o 7z do sistema
-        # Para garantir, vamos usar o 7z do sistema que já tem no Windows runner
-        import subprocess
-        subprocess.run(["7z", "e", dest_7z, "-o.", "mpv-2.dll", "-y"], check=True)
+        print(f"Extracting {dll_name}...")
+        # Extrai recursivamente para encontrar o arquivo onde quer que ele esteja
+        subprocess.run(["7z", "e", dest_7z, "-o.", dll_name, "-y", "-r"], check=True)
         
-        if os.path.exists("mpv-2.dll"):
-            print("Success: mpv-2.dll extracted.")
+        if os.path.exists(dll_name):
+            # Renomeia para mpv-2.dll para manter compatibilidade com o que o PyInstaller espera
+            os.rename(dll_name, "mpv-2.dll")
+            print("Success: mpv-2.dll extracted and renamed.")
+            if os.path.exists(dest_7z): os.remove(dest_7z)
         else:
-            print("Error: mpv-2.dll not found after extraction.")
+            print(f"Error: {dll_name} not found after extraction.")
             sys.exit(1)
             
     except Exception as e:
