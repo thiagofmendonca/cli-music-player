@@ -22,9 +22,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install .
         pip install pyinstaller windows-curses PyQt6 pillow certifi
+    
+    - name: Download libmpv (Windows)
+      shell: powershell
+      run: |
+        Invoke-WebRequest -Uri "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20240428-git-072023d.7z/download" -OutFile "libmpv.7z" -UserAgent "NativeHost"
+        7z e libmpv.7z -o. mpv-2.dll
+        dir mpv-2.dll
+
     - name: Build Windows Exe
       run: |
-        pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --additional-hooks-dir=hooks --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" --hidden-import "certifi" run_gui.py
+        pyinstaller --noconfirm --onefile --windowed --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --add-binary "mpv-2.dll;." --additional-hooks-dir=hooks --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" --hidden-import "certifi" run_gui.py
     - name: Upload Windows Artifact
       uses: actions/upload-artifact@v4
       with:

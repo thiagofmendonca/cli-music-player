@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.debug = debug
         self.engine = PlayerEngine(debug=debug)
-        self.setWindowTitle("FreeThullu Music Player v1.0.5 (GUI)")
+        self.setWindowTitle("FreeThullu Music Player v1.0.6 (GUI)")
         self.setMinimumSize(900, 700)
         
         # Set Window Icon
@@ -219,7 +219,7 @@ class MainWindow(QMainWindow):
         lbl_insta.setOpenExternalLinks(True)
         lbl_insta.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_v = QLabel("Version 1.0.5")
+        lbl_v = QLabel("Version 1.0.6")
         lbl_v.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         about_layout.addStretch()

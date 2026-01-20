@@ -1,6 +1,6 @@
 # FreeThullu Music Player 🐙🎵
 
-**Version 1.0.5**
+**Version 1.0.6**
 
 A powerful, hybrid music player that summons your beats from the deep.
 Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode for terminal dwellers.
