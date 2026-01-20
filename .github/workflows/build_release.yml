@@ -24,13 +24,9 @@ jobs:
         pip install pyinstaller windows-curses PyQt6 pillow certifi
     
     - name: Download libmpv (Windows)
-      shell: powershell
+      shell: cmd
       run: |
-        $rssUrl = "https://sourceforge.net/projects/mpv-player-windows/rss?path=/libmpv"
-        $content = (Invoke-WebRequest $rssUrl -UserAgent "NativeHost").Content
-        $latestUrl = ([xml]$content).rss.channel.item | Select-Object -First 1 | % { $_.link }
-        Write-Host "Downloading latest libmpv from: $latestUrl"
-        Invoke-WebRequest -Uri $latestUrl -OutFile "libmpv.7z" -UserAgent "NativeHost"
+        curl -L -A "Mozilla/5.0" -o libmpv.7z "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250118-git-468d34c.7z/download"
         7z e libmpv.7z -o. mpv-2.dll
         dir mpv-2.dll
 
