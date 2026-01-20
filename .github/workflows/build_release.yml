@@ -24,10 +24,8 @@ jobs:
         pip install pyinstaller windows-curses PyQt6 pillow certifi
     
     - name: Download libmpv (Windows)
-      shell: cmd
       run: |
-        curl -L -A "Mozilla/5.0" -o libmpv.7z "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250118-git-468d34c.7z/download"
-        7z e libmpv.7z -o. mpv-2.dll
+        python download_libmpv.py
         dir mpv-2.dll
 
     - name: Build Windows Exe
