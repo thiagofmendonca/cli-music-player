@@ -4,6 +4,7 @@ import platform
 import shutil
 import urllib.request
 import tempfile
+import json
 
 def get_mpv_path():
     # 1. Check global PATH
@@ -22,6 +23,24 @@ def get_mpv_path():
 
     return None
 
+def get_latest_mpv_url():
+    try:
+        api_url = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            for asset in data.get('assets', []):
+                # Prefer v3 x86_64 build
+                if 'mpv-x86_64-v3' in asset['name'] and asset['name'].endswith('.7z'):
+                    return asset['browser_download_url']
+                # Fallback to standard x86_64
+                if 'mpv-x86_64' in asset['name'] and asset['name'].endswith('.7z') and 'v3' not in asset['name']:
+                    fallback = asset['browser_download_url']
+            
+            return fallback if 'fallback' in locals() else None
+    except:
+        return None
+
 def download_mpv():
     """
     Downloads MPV static build for the current platform.
@@ -33,8 +52,10 @@ def download_mpv():
 
     print("MPV not found. Attempting to download a portable version...")
     
-    # URL for shinchiro's 20260111 release
-    url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260111/mpv-x86_64-v3-20260111-git-9483d6e.7z"
+    url = get_latest_mpv_url()
+    if not url:
+        # Hardcoded fallback if API fails
+        url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260120/mpv-dev-x86_64-20260120-git-b7e8fe9.7z"
     
     install_dir = os.path.join(os.environ.get("APPDATA", ""), "cli-music-player", "bin")
     if not os.path.exists(install_dir):
