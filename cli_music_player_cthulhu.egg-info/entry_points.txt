@@ -1,2 +1,4 @@
 [console_scripts]
-musicplayer = musicplayer.main:main
+freethullu-player = musicplayer.launcher:launch
+musicplayer = musicplayer.launcher:launch
+musicplayer-gui = musicplayer.gui:main

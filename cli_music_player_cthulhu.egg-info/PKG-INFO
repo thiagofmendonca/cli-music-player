@@ -1,10 +1,10 @@
 Metadata-Version: 2.4
 Name: cli-music-player-cthulhu
-Version: 0.6.9
+Version: 1.0.10
 Summary: A lightweight terminal music player with mpv engine and auto-setup
 Author-email: Thiago Mendonça <tfariamendonca@gmail.com>
 Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
+Classifier: License :: OSI Approved :: GNU Affero General Public License v3
 Classifier: Operating System :: POSIX :: Linux
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
@@ -12,80 +12,113 @@ License-File: LICENSE
 Requires-Dist: yt-dlp>=2023.0.0
 Requires-Dist: windows-curses; sys_platform == "win32"
 Requires-Dist: py7zr; sys_platform == "win32"
+Requires-Dist: PyQt6>=6.4.0
+Requires-Dist: mpris2; sys_platform == "linux"
 Dynamic: license-file
 
-# CLI Music Player (Cthulhu Edition)
+# FreeThullu Music Player 🐙🎵
 
-A powerful, lightweight terminal-based music player written in Python. It combines a robust local file browser with online streaming capabilities (YouTube, SoundCloud) and a unique visual style featuring a pulsing Cthulhu and synced lyrics.
+**Version 1.0.10**
 
-![Demo](demo.gif)
+A powerful, hybrid music player that summons your beats from the deep.
+Featuring a modern **GUI** (PyQt6) for desktop comfort and a robust **CLI** mode for terminal dwellers.
 
-## Features
+## ✨ Features
 
-- **Hybrid Playback:**
-  - **Local:** Plays MP3, FLAC, OGG, WAV, M4A, and more.
-  - **Online:** Search and stream directly from **YouTube** and **SoundCloud**.
-- **Robust Engine:** Uses `mpv` as the core backend for best-in-class format support and stability.
-- **Visuals:**
-  - Pulsing Cthulhu animation.
-  - **Synced Lyrics:** Automatic fetching from LRCLib with fallback to Letras.mus.br and Lyrics.ovh.
-- **Smart Interface:**
-  - **Recursive Library:** Scan entire folder trees.
-  - **Search Mode:** Press `/` to find online tracks instantly.
-  - **Persistence:** Save your default music directory.
-- **Cross-Platform:**
-  - **Linux:** Works with system `mpv`.
-  - **Windows:** Automatically downloads a portable `mpv` if missing.
+- **Hybrid Interface:**
+  - **Unified Binary:** A single executable for all modes.
+  - **GUI (Default):** Modern Dark Theme, Tabbed Interface (Now Playing, Library, Search, Queue), and Animated Visuals.
+  - **CLI (`--cli`):** Lightweight, keyboard-driven terminal interface.
+- **Robust Debugging:** Use `--debug` to troubleshoot playback or scraping issues.
+- **Universal Playback:**
+  - **Local Library:** Deep recursive scanning, instant filtering, and file management.
+  - **Online Streaming:** Seamless **YouTube** and **SoundCloud** (prefix `sc:`) integration.
+- **Immersive Experience:**
+  - **Animated FreeThullu:** Watch the Great Old One pulse to the rhythm.
+  - **Synced Lyrics:** Automatic fetching from LRCLib and Letras.mus.br.
+- **Smart Queue:**
+  - Manage your playlist with ease.
+  - **Context Menus:** Right-click to add multiple items to the queue.
+  - **Jump:** Double-click any item in the queue to play immediately.
+- **Cross-Platform:** Native support for **Linux** and **Windows** (with auto-mpv setup).
 
-## Installation
+## 🚀 Installation
 
-### Via PIP (Recommended)
+### Via PIP
 
 ```bash
 pip install cli-music-player-cthulhu
 ```
 
-### Requirements
+### System Requirements
 
-- **Python 3.8+**
-- **Linux:** You must install `mpv` (e.g., `sudo pacman -S mpv` or `sudo apt install mpv`).
-- **Windows:** No extra steps! The player downloads a standalone `mpv` on first run if needed.
+- **Python 3.9+**
+- **Linux:** Requires `mpv` (`sudo apt install mpv` / `sudo pacman -S mpv`).
+- **Windows:** Auto-downloads `mpv` on first run.
 
-## Usage
+## 🎮 Usage
 
-Run the player:
+Launch the player using the unified command:
 
 ```bash
+# Start in GUI mode (Default)
 musicplayer
-# OR open a specific folder:
-musicplayer /path/to/music
+
+# Start in CLI mode (Terminal)
+musicplayer --cli
+
+# Enable Debug Mode (Works for both GUI and CLI)
+musicplayer --debug
+musicplayer --cli --debug
+
+# You can also use the alias:
+freethullu-player
 ```
 
-### Controls
+### 🖥️ Graphical Interface (GUI)
+Launch the full experience with animated visuals and tabbed navigation.
 
-| Key | Action |
-| :--- | :--- |
-| **Arrow Up/Down** | Navigate files / Scroll Lyrics |
-| **Enter** | Play file / Open directory / Select Search Result |
-| **Space** | Play / Pause |
-| **/** | **Search Online** (YouTube default, use `sc:` for SoundCloud) |
-| **l** | Toggle Lyrics / Cthulhu View |
-| **D** (Shift+d) | **Set current directory as Default** (Persistent) |
-| **n** | Next Track |
-| **p** | Previous Track (History-aware) |
-| **z** | Toggle Shuffle Mode |
-| **R** (Shift+r) | Load Recursive Library (all subfolders) |
-| **B** (Shift+b) | Return to Browser Mode |
-| **+ / -** | Volume Up / Down |
-| **Tab** | Toggle "Now Playing" View |
-| **s** | Stop |
-| **q** | Quit (or go back) |
+**Controls:**
+- **Navigation:** Use tabs to switch views.
+- **Library:** Type in the filter box. **Press Enter** to trigger a deep recursive search in subfolders.
+- **Search:** Type queries for YouTube. Prefix with `sc:` for SoundCloud.
+- **Queueing:** Select multiple items (Ctrl/Shift+Click) -> Right Click -> *Add to Queue*.
 
-## Advanced Search
+### 📟 Terminal Interface (CLI)
+A lightweight, keyboard-driven interface for terminal fans.
 
-- **YouTube:** Just type your query (e.g., `Coldplay Yellow`).
-- **SoundCloud:** Prefix with `sc:` (e.g., `sc:Synthwave mix`).
+**Controls:** 
+- `Space`: Pause/Play
+- `/`: Online Search
+- `a`: Add current selection to Queue
+- `n`: Next track
+- `p`: Previous track
+- `q`: Quit
 
-## License
+---
 
-MIT
+## 📦 Building from Source
+
+To build standalone executables (Linux/Windows):
+
+1. **Clone and Install Dependencies:**
+   ```bash
+   git clone https://github.com/thiagofmendonca/cli-music-player.git
+   cd cli-music-player
+   pip install .
+   pip install pyinstaller
+   ```
+
+2. **Build:**
+   ```bash
+   # Linux
+   python build_exe.py
+   
+   # Windows (via GitHub Actions recommended)
+   # Or manual: Ensure libmpv-2.dll is in the folder
+   pyinstaller --noconfirm --onefile --name "FreeThulluPlayer" --add-data "musicplayer/assets;musicplayer/assets" --add-data "VERSION;." --icon "musicplayer/assets/frame1.png" --hidden-import "musicplayer" run_musicplayer.py
+   ```
+
+## 📜 License
+
+GNU Affero General Public License v3.0 (AGPLv3)

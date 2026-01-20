@@ -1,6 +1,9 @@
 LICENSE
+MANIFEST.in
 README.md
+VERSION
 pyproject.toml
+setup.py
 cli_music_player_cthulhu.egg-info/PKG-INFO
 cli_music_player_cthulhu.egg-info/SOURCES.txt
 cli_music_player_cthulhu.egg-info/dependency_links.txt
@@ -9,7 +12,14 @@ cli_music_player_cthulhu.egg-info/requires.txt
 cli_music_player_cthulhu.egg-info/top_level.txt
 musicplayer/__init__.py
 musicplayer/config.py
+musicplayer/engine.py
+musicplayer/gui.py
+musicplayer/ipc.py
+musicplayer/launcher.py
 musicplayer/main.py
+musicplayer/mpris_stub.py
 musicplayer/mpv_setup.py
 musicplayer/search.py
 musicplayer/utils.py
+musicplayer/assets/frame1.png
+musicplayer/assets/frame2.png
