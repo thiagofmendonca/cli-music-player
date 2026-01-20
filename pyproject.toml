@@ -2,9 +2,14 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
 [project]
 name = "cli-music-player-cthulhu"
-version = "1.0.8"
+# version removed here (dynamic)
 authors = [
   { name="Thiago Mendonça", email="tfariamendonca@gmail.com" },
 ]

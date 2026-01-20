@@ -10,6 +10,7 @@ from PyQt6.QtGui import QFont, QColor, QPalette, QAction, QPixmap, QIcon, QKeySe
 
 from .engine import PlayerEngine
 from .utils import format_time
+from . import __version__
 
 class CthulhuPulse(QLabel):
     def __init__(self):
@@ -62,7 +63,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.debug = debug
         self.engine = PlayerEngine(debug=debug)
-        self.setWindowTitle("FreeThullu Music Player v1.0.8 (GUI)")
+        self.setWindowTitle(f"FreeThullu Music Player v{__version__} (GUI)")
         self.setMinimumSize(900, 700)
         
         # Set Window Icon
@@ -219,7 +220,7 @@ class MainWindow(QMainWindow):
         lbl_insta.setOpenExternalLinks(True)
         lbl_insta.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_v = QLabel("Version 1.0.8")
+        lbl_v = QLabel(f"Version {__version__}")
         lbl_v.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         about_layout.addStretch()

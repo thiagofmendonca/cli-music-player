@@ -40,6 +40,15 @@ else
     ICON_ENTRY="Icon=$ICON_FULL_PATH"
 fi
 
+# Refresh database and KDE cache
+update-desktop-database "$APP_DIR" 2>/dev/null
+
+# Get version if file exists
+VERSION="Unknown"
+if [ -f "VERSION" ]; then
+    VERSION=$(cat VERSION)
+fi
+
 # Create .desktop file
 echo "Creating $DESKTOP_FILE..."
 cat > "$APP_DIR/$DESKTOP_FILE" <<EOF
@@ -52,11 +61,8 @@ $ICON_ENTRY
 Terminal=false
 Categories=Audio;Music;Player;
 Keywords=music;player;mpv;youtube;
-StartupWMClass=FreeThullu Music Player v1.0.8 (GUI)
+StartupWMClass=FreeThullu Music Player v\${VERSION} (GUI)
 EOF
-
-# Refresh database and KDE cache
-update-desktop-database "$APP_DIR" 2>/dev/null
 # Try to force KDE to update icon cache if kbuildsycoca6 exists (KDE 6) or kbuildsycoca5
 if command -v kbuildsycoca6 &> /dev/null; then
     kbuildsycoca6 --noincremental

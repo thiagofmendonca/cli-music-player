@@ -27,7 +27,8 @@ args = [
     '--clean',
     '--noconfirm',
     # Include the source package files as data just in case
-    '--add-data=musicplayer;musicplayer', 
+    '--add-data=musicplayer;musicplayer',
+    '--add-data=VERSION;.',
     # Hidden imports that dynamic analysis might miss
     '--hidden-import=musicplayer',
     '--hidden-import=musicplayer.mpv_setup',
