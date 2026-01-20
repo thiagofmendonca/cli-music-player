@@ -26,7 +26,11 @@ jobs:
     - name: Download libmpv (Windows)
       shell: powershell
       run: |
-        Invoke-WebRequest -Uri "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20240428-git-072023d.7z/download" -OutFile "libmpv.7z" -UserAgent "NativeHost"
+        $rssUrl = "https://sourceforge.net/projects/mpv-player-windows/rss?path=/libmpv"
+        $content = (Invoke-WebRequest $rssUrl -UserAgent "NativeHost").Content
+        $latestUrl = ([xml]$content).rss.channel.item | Select-Object -First 1 | % { $_.link }
+        Write-Host "Downloading latest libmpv from: $latestUrl"
+        Invoke-WebRequest -Uri $latestUrl -OutFile "libmpv.7z" -UserAgent "NativeHost"
         7z e libmpv.7z -o. mpv-2.dll
         dir mpv-2.dll
 
