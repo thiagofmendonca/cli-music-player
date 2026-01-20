@@ -19,6 +19,7 @@ from .utils import slugify, format_time, parse_lrc
 from .search import OnlineSearcher
 from .mpv_setup import get_mpv_path, download_mpv
 from .config import load_config, save_config
+from .ipc import MpvIpcClient
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
@@ -73,7 +74,7 @@ class MusicPlayer:
         
         # MPV State
         self.mpv_process = None
-        self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
+        self.ipc = MpvIpcClient()
         self.duration = 0
         self.position = 0
         self.metadata = {'title': 'No Music Playing', 'artist': 'Press [b] for Library'}
@@ -143,7 +144,7 @@ class MusicPlayer:
     def cleanup(self):
         if self.mpv_process:
             try:
-                self.send_ipc_command(["quit"])
+                self.ipc.send_command(["quit"])
                 try: self.mpv_process.wait(timeout=0.5)
                 except subprocess.TimeoutExpired: self.mpv_process.kill()
             except:
@@ -151,9 +152,7 @@ class MusicPlayer:
                 except: pass
             self.mpv_process = None
             
-        if os.path.exists(self.ipc_socket):
-            try: os.remove(self.ipc_socket)
-            except: pass
+        self.ipc.cleanup()
         
         # Cleanup Cache
         try:
@@ -162,28 +161,8 @@ class MusicPlayer:
                 shutil.rmtree(cache_dir)
         except: pass
 
-    def send_ipc_command(self, command):
-        if not os.path.exists(self.ipc_socket): return None
-        try:
-            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            client.connect(self.ipc_socket)
-            message = json.dumps({"command": command}) + '\n'
-            client.sendall(message.encode('utf-8'))
-            client.settimeout(0.1)
-            response = b""
-            try:
-                while True:
-                    chunk = client.recv(4096)
-                    if not chunk: break
-                    response += chunk
-                    if b'\n' in chunk: break
-            except socket.timeout: pass
-            client.close()
-            return response
-        except: return None
-
     def get_property(self, prop):
-        res = self.send_ipc_command(["get_property", prop])
+        res = self.ipc.send_command(["get_property", prop])
         if res:
             try:
                 data = json.loads(res.decode('utf-8').strip())
@@ -359,7 +338,7 @@ class MusicPlayer:
         cmd = [
             self.mpv_bin,
             '--no-video',
-            f'--input-ipc-server={self.ipc_socket}',
+            self.ipc.get_mpv_flag(),
             f'--volume={self.volume}',
             '--idle',
             target
@@ -388,11 +367,11 @@ class MusicPlayer:
              self.stop_music()
 
     def toggle_pause(self):
-        self.send_ipc_command(["cycle", "pause"])
+        self.ipc.send_command(["cycle", "pause"])
 
     def change_volume(self, delta):
         self.volume = max(0, min(200, self.volume + delta))
-        self.send_ipc_command(["set_property", "volume", self.volume])
+        self.ipc.send_command(["set_property", "volume", self.volume])
 
     def draw_player_view(self):
         height, width = self.stdscr.getmaxyx()

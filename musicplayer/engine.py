@@ -16,6 +16,7 @@ from .utils import slugify, format_time, parse_lrc
 from .search import OnlineSearcher
 from .mpv_setup import get_mpv_path, download_mpv
 from .config import load_config, save_config
+from .ipc import MpvIpcClient
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma', '.aac', '.opus'}
@@ -50,7 +51,7 @@ class PlayerEngine(QObject):
         
         self.searcher = OnlineSearcher()
         self.mpv_process = None
-        self.ipc_socket = os.path.join(tempfile.gettempdir(), f'mpv_socket_{os.getpid()}')
+        self.ipc = MpvIpcClient()
         self.duration = 0
         self.position = 0
         self.metadata = {}
@@ -70,7 +71,7 @@ class PlayerEngine(QObject):
         self.running = False
         if self.mpv_process:
             try:
-                self.send_ipc_command(["quit"])
+                self.ipc.send_command(["quit"])
                 try: self.mpv_process.wait(timeout=0.5)
                 except subprocess.TimeoutExpired: self.mpv_process.kill()
             except:
@@ -78,32 +79,10 @@ class PlayerEngine(QObject):
                 except: pass
             self.mpv_process = None
             
-        if os.path.exists(self.ipc_socket):
-            try: os.remove(self.ipc_socket)
-            except: pass
-
-    def send_ipc_command(self, command):
-        if not os.path.exists(self.ipc_socket): return None
-        try:
-            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            client.connect(self.ipc_socket)
-            message = json.dumps({"command": command}) + '\n'
-            client.sendall(message.encode('utf-8'))
-            client.settimeout(0.1)
-            response = b""
-            try:
-                while True:
-                    chunk = client.recv(4096)
-                    if not chunk: break
-                    response += chunk
-                    if b'\n' in chunk: break
-            except socket.timeout: pass
-            client.close()
-            return response
-        except: return None
+        self.ipc.cleanup()
 
     def get_property(self, prop):
-        res = self.send_ipc_command(["get_property", prop])
+        res = self.ipc.send_command(["get_property", prop])
         if res:
             try:
                 data = json.loads(res.decode('utf-8').strip())
@@ -114,6 +93,7 @@ class PlayerEngine(QObject):
     def ipc_loop(self):
         while self.running:
             if self.mpv_process and self.mpv_process.poll() is None:
+                # ... (rest of loop remains same, using get_property which now uses ipc)
                 pos = self.get_property("time-pos")
                 if pos is not None: 
                     self.position = float(pos)
@@ -325,7 +305,7 @@ class PlayerEngine(QObject):
     def _start_mpv(self, target):
         self.log(f"Starting MPV: {target}")
         if self.mpv_process:
-            self.send_ipc_command(["quit"])
+            self.ipc.send_command(["quit"])
             try: self.mpv_process.wait(timeout=0.2)
             except: self.mpv_process.kill()
 
@@ -338,7 +318,7 @@ class PlayerEngine(QObject):
         cmd = [
             self.mpv_bin,
             '--no-video',
-            f'--input-ipc-server={self.ipc_socket}',
+            self.ipc.get_mpv_flag(),
             f'--volume={self.volume}',
             '--idle',
             target
@@ -362,16 +342,9 @@ class PlayerEngine(QObject):
 
     def stop_music(self):
         if self.mpv_process:
-            self.send_ipc_command(["stop"])
+            self.ipc.send_command(["stop"])
         self.playing_index = -1
-        self.paused = False # Or True? Logically "stopped"
-        # We need to ensure animation stops. 
-        # GUI interprets status_changed(False) as "Not Paused" -> Playing?
-        # Wait, status_changed is (paused: bool). 
-        # If paused=True, animation stops. 
-        # If stopped, we also want animation to stop.
-        # Let's emit status_changed(True) when stopped? Or handle "stopped" state separately?
-        # Better: status_changed emits 'paused' state. If stopped, it's effectively paused/idle.
+        self.paused = False 
         self.status_changed.emit(True) 
 
     def handle_end_of_file(self):
@@ -389,15 +362,15 @@ class PlayerEngine(QObject):
              self.stop_music()
 
     def toggle_pause(self):
-        self.send_ipc_command(["cycle", "pause"])
+        self.ipc.send_command(["cycle", "pause"])
 
     def set_volume(self, value):
         self.volume = max(0, min(200, value))
-        self.send_ipc_command(["set_property", "volume", self.volume])
+        self.ipc.send_command(["set_property", "volume", self.volume])
         save_config({'volume': self.volume})
 
     def seek(self, position):
-        self.send_ipc_command(["seek", position, "absolute"])
+        self.ipc.send_command(["seek", position, "absolute"])
         # Update position immediately to make UI responsive
         self.position = position
         self.position_changed.emit(self.position, self.duration)
