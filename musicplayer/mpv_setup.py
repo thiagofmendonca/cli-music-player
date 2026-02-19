@@ -55,7 +55,7 @@ def download_mpv():
     url = get_latest_mpv_url()
     if not url:
         # Hardcoded fallback if API fails
-        url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260120/mpv-dev-x86_64-20260120-git-b7e8fe9.7z"
+        url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260120/mpv-x86_64-20260120-git-b7e8fe9.7z"
     
     install_dir = os.path.join(os.environ.get("APPDATA", ""), "cli-music-player", "bin")
     if not os.path.exists(install_dir):
@@ -68,7 +68,7 @@ def download_mpv():
         import py7zr
         
         # Download
-        print(f"Downloading MPV (20260111)...")
+        print(f"Downloading MPV...")
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=60) as response, open(download_path, 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
