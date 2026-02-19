@@ -304,6 +304,12 @@ class PlayerEngine(QObject):
 
     def _start_mpv(self, target):
         self.log(f"Starting MPV: {target}")
+
+        if not self.mpv_bin:
+            self.message_emitted.emit("Error: MPV not found. Please install it.")
+            self.stop_music()
+            return
+
         if self.mpv_process:
             self.ipc.send_command(["quit"])
             try: self.mpv_process.wait(timeout=0.2)
