@@ -12,7 +12,7 @@ description = "A lightweight terminal music player with mpv engine and auto-setu
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "yt-dlp>=2023.0.0",
+    "yt-dlp>=2024.03.10",
     "windows-curses; sys_platform == 'win32'",
     "py7zr; sys_platform == 'win32'",
     "PyQt6>=6.4.0"
