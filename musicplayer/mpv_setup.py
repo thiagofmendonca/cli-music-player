@@ -55,7 +55,7 @@ def download_mpv():
     url = get_latest_mpv_url()
     if not url:
         # Hardcoded fallback if API fails
-        url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260120/mpv-x86_64-20260120-git-b7e8fe9.7z"
+        url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260610/mpv-x86_64-v3-20260610-git-304426c.7z"
     
     install_dir = os.path.join(os.environ.get("APPDATA", ""), "cli-music-player", "bin")
     if not os.path.exists(install_dir):

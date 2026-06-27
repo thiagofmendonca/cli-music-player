@@ -2,7 +2,7 @@ import yt_dlp
 import json
 import sys
 
-def test_search(query, source='youtube'):
+def run_search(query, source='youtube'):
     print(f"--- Testing Source: {source} (Query: '{query}') ---")
     
     # yt-dlp search prefixes
@@ -44,5 +44,5 @@ def test_search(query, source='youtube'):
     print("\n")
 
 if __name__ == "__main__":
-    test_search("Coldplay Yellow", "youtube")
-    test_search("Synthwave", "soundcloud")
+    run_search("Coldplay Yellow", "youtube")
+    run_search("Synthwave", "soundcloud")
